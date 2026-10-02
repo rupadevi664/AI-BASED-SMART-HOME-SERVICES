@@ -106,11 +106,40 @@ PHASE2_COLUMNS = [
     ),
 ]
 
+# Additive Phase 6 columns: (table, column, MySQL DDL, SQLite DDL)
+# All nullable / server-defaulted so existing rows stay valid. Legacy booking
+# rows get 'UNPAID' automatically via the server default.
+PHASE6_COLUMNS = [
+    (
+        "bookings",
+        "payment_status",
+        "ALTER TABLE bookings ADD COLUMN payment_status VARCHAR(20) NOT NULL DEFAULT 'UNPAID'",
+        "ALTER TABLE bookings ADD COLUMN payment_status VARCHAR(20) NOT NULL DEFAULT 'UNPAID'",
+    ),
+    (
+        "expert_profiles",
+        "rating_avg",
+        "ALTER TABLE expert_profiles ADD COLUMN rating_avg DECIMAL(3, 2) NULL",
+        "ALTER TABLE expert_profiles ADD COLUMN rating_avg NUMERIC(3, 2) NULL",
+    ),
+    (
+        "expert_profiles",
+        "rating_count",
+        "ALTER TABLE expert_profiles ADD COLUMN rating_count INT NOT NULL DEFAULT 0",
+        "ALTER TABLE expert_profiles ADD COLUMN rating_count INT NOT NULL DEFAULT 0",
+    ),
+]
+
 
 def _migrate_phase2() -> None:
-    """Additive, idempotent Phase 2 migration — never drops data."""
+    """Additive, idempotent migrations — never drops data.
+
+    Runs the Phase 2 column adds, then the Phase 6 column adds (payment_status
+    on bookings, rating aggregates on expert_profiles). New tables (payments,
+    reviews) are created by create_all before this is called.
+    """
     with engine.connect() as conn:
-        for table, column, mysql_ddl, sqlite_ddl in PHASE2_COLUMNS:
+        for table, column, mysql_ddl, sqlite_ddl in [*PHASE2_COLUMNS, *PHASE6_COLUMNS]:
             columns = _inspect_columns(conn, table)
             if not columns:
                 continue  # table doesn't exist yet; create_all will make it fresh
@@ -148,9 +177,28 @@ def _normalize_legacy_values(conn) -> None:
     conn.commit()
 
 
-def init_db(seed_admin: bool = False) -> None:
-    """Create the database, all tables and seed the initial services."""
+def reset_database() -> None:
+    """Drop and recreate all tables to reset AUTO_INCREMENT IDs back to 1."""
     _ensure_database()
+    logger.info("Resetting database (dropping all existing tables) ...")
+    with engine.connect() as conn:
+        if engine.dialect.name == "mysql":
+            conn.execute(text("SET FOREIGN_KEY_CHECKS = 0;"))
+            for table in reversed(Base.metadata.sorted_tables):
+                conn.execute(text(f"DROP TABLE IF EXISTS `{table.name}`;"))
+            conn.execute(text("SET FOREIGN_KEY_CHECKS = 1;"))
+            conn.commit()
+        else:
+            Base.metadata.drop_all(bind=engine)
+    logger.info("Database reset: all old tables removed.")
+
+
+def init_db(seed_admin: bool = False, reset: bool = False) -> None:
+    """Create the database, all tables and seed the initial services."""
+    if reset:
+        reset_database()
+    else:
+        _ensure_database()
     logger.info("Creating database tables ...")
     Base.metadata.create_all(bind=engine)
     _migrate_phase2()
@@ -173,7 +221,7 @@ def init_db(seed_admin: bool = False) -> None:
                 created.append(name)
         if created:
             db.commit()
-            logger.info("Seeded services: %s", ", ".join(created))
+            logger.info("Seeded services (IDs starting from 1): %s", ", ".join(created))
         else:
             logger.info("Initial services already present (%d).", len(existing_names))
 
@@ -209,9 +257,11 @@ def _seed_admin(db) -> None:
         )
     )
     db.commit()
-    logger.info("Seeded ADMIN account: %s", settings.ADMIN_EMAIL)
+    logger.info("Seeded ADMIN account (User ID = 1): %s", settings.ADMIN_EMAIL)
 
 
 if __name__ == "__main__":
+    reset = "--reset" in sys.argv
     create_admin = "--admin" in sys.argv
-    init_db(seed_admin=create_admin)
+    init_db(seed_admin=create_admin, reset=reset)
+

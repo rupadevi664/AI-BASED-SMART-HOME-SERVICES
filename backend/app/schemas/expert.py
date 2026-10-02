@@ -33,6 +33,9 @@ class ExpertProfileResponse(BaseModel):
     longitude: Decimal | None = None
     verification_status: VerificationStatus
     availability: AvailabilityStatus
+    # Phase 6 rating aggregates (None/0 until reviews exist).
+    rating_avg: float | None = None
+    rating_count: int = 0
     services: list[ServiceResponse] = []
     created_at: datetime
 
@@ -86,5 +89,8 @@ class NearbyExpertResponse(BaseModel):
     longitude: Decimal | None = None
     availability: AvailabilityStatus
     verification_status: VerificationStatus
+    # Phase 6 rating aggregates (None/0 until reviews exist).
+    rating_avg: float | None = None
+    rating_count: int = 0
     distance_km: float
     services: list[NearbyServiceInfo]

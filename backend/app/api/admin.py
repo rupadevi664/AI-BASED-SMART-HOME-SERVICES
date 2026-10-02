@@ -211,6 +211,8 @@ def list_experts(
                 "longitude": profile.longitude,
                 "verification_status": profile.verification_status,
                 "availability": profile.availability,
+                "rating_avg": profile.rating_avg,
+                "rating_count": profile.rating_count,
                 "services": profile.services,
                 "created_at": profile.created_at,
             }
@@ -261,6 +263,8 @@ def set_expert_verification(
         "longitude": profile.longitude,
         "verification_status": profile.verification_status,
         "availability": profile.availability,
+        "rating_avg": profile.rating_avg,
+        "rating_count": profile.rating_count,
         "services": profile.services,
         "created_at": profile.created_at,
     }

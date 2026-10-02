@@ -1,4 +1,4 @@
-# Backend — AI-BASED-SMART-HOME-SERVICES (Phase 1 + 2 + 3 + 4)
+# Backend — AI-BASED-SMART-HOME-SERVICES (Phase 1 + 2 + 3 + 4 + 5)
 
 FastAPI backend for the intelligent home-service platform.
 
@@ -29,8 +29,9 @@ FastAPI backend for the intelligent home-service platform.
 Customers register and discover verified home-service experts near them.
 Experts register with a profile (skills, experience, location, static
 coordinates, availability, offered services). Admins manage the service
-catalogue and expert verification. Booking, chat, payments and AI features
-belong to later phases.
+catalogue and expert verification. Bookings get real-time chat and, once
+ACCEPTED, live expert location tracking. Payments and AI features belong to
+later phases.
 
 ## 2. Feature matrix
 
@@ -40,15 +41,16 @@ belong to later phases.
 | 2 | `GET /services`, `GET /services/{id}`, admin CRUD for services, expert profile GET/PUT, expert↔service M2M, admin verification, Haversine nearby search, 44 more tests |
 | 3 | Booking model + lifecycle, `POST /bookings`, customer history/cancel, expert accept/reject/complete, admin booking views, snapshots, conflicts, 46 more tests |
 | 4 | `WS /ws/bookings/{id}` chat, `GET /bookings/{id}/messages` history, Message model + table, booking-scoped ConnectionManager, JWT `?token=` auth, 30 more tests |
+| 5 | Live location for ACCEPTED bookings: `WS /ws/bookings/{id}/location` (assigned expert sends, customer receives), `GET /bookings/{id}/location[/history]`, `live_locations` table, validation + throttling + retention, 55 more tests |
 
-Not implemented (later phases): booking, payments/Razorpay, chat/WebSockets,
-live location, LLM/RAG/ChromaDB, notifications, reviews/ratings, frontend.
+Not implemented (later phases): payments/Razorpay, LLM/RAG/ChromaDB,
+notifications, reviews/ratings, frontend.
 
 ## 3. Technology stack
 
 Python 3.10+ (developed on 3.13) · FastAPI 0.141 · Uvicorn 0.52 · SQLAlchemy 2.0
 · PyMySQL (MySQL 8) · Pydantic v2 + pydantic-settings · PyJWT (HS256) · bcrypt ·
-pytest + httpx. **No new dependencies were added for Phase 2.**
+pytest + httpx. **No new dependencies were added for Phases 2–5.**
 
 ## 4. Folder structure
 
@@ -101,6 +103,21 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=<strong password>
 ADMIN_NAME=Platform Admin
+# Phase 6: Razorpay payments (get TEST keys: Razorpay Dashboard → Settings → API Keys)
+RAZORPAY_KEY_ID=
+RAZORPAY_KEY_SECRET=
+RAZORPAY_CURRENCY=INR
+
+# Phase 7: Google Gemini AI assistant (key from https://aistudio.google.com/apikey)
+# Backend-only secret; leave empty to run without the assistant (503 LLM_NOT_CONFIGURED)
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-2.0-flash
+GEMINI_TIMEOUT_SECONDS=20
+GEMINI_MAX_HISTORY_TURNS=8
+
+# Phase 5: live location
+LOCATION_UPDATE_INTERVAL_SECONDS=1
+LOCATION_HISTORY_RETENTION_DAYS=7
 ```
 
 URL-encode special characters in the DB password (`@` → `%40`). Never commit `.env`.
@@ -126,11 +143,12 @@ exactly once. **No data is ever dropped.**
 
 ```bash
 cd backend
-.venv\Scripts\python -m pytest -v        # 151 tests, SQLite in-memory, no creds
+.venv\Scripts\python -m pytest -v        # 269 tests, SQLite in-memory, no creds
 .venv\Scripts\python scripts\live_acceptance.py   # 77 checks vs a running server
 .venv\Scripts\python scripts\setup_chat_booking.py # mint customer/expert/booking for chat
 .venv\Scripts\python scripts\websocket_test.py [booking_id]   # two-client chat flow
 .venv\Scripts\python scripts\ws_security_test.py [booking_id] # intruders denied
+.venv\Scripts\python scripts\location_test.py      # two-client live-location flow
 ```
 
 ## 13. Authentication flow (unchanged from Phase 1)
@@ -302,6 +320,219 @@ removed individually without touching other participants.
 Swagger documents the REST history endpoint; WebSocket endpoints are not
 executable in Swagger UI — use the scripts above or any WS client with the
 URL pattern shown here.
+
+## Phase 5 — live location tracking (ACCEPTED bookings only)
+
+**Phase 5 provides live location tracking only for an ACCEPTED booking. Only
+the assigned expert can send location. Only the booking's customer and its
+assigned expert can access that location. This is NOT public location
+sharing.** PENDING/REJECTED/CANCELLED/COMPLETED bookings refuse the location
+socket (`4409`); admins are deliberately not admitted; unrelated users get
+`4403`; REST without access returns 403 (401 unauthenticated, 404 missing
+booking/no location yet).
+
+### Purpose & architecture
+
+While an expert is on an accepted job, they stream GPS fixes that the customer
+sees in real time. Location traffic runs over a **dedicated WebSocket,
+separate from chat**: `ConnectionManager` keys sockets by `(booking_id,
+channel)` with channels `"chat"` (Phase 4) and `"location"` (Phase 5) — the
+two streams never mix, and nothing ever crosses bookings.
+
+### WebSocket URL, authentication & authorization
+
+```
+ws://127.0.0.1:8000/ws/bookings/{booking_id}/location?token=<JWT>
+```
+
+Same JWT machinery as chat: `?token=` is validated with the existing
+`decode_access_token` before the socket is accepted (missing/invalid/expired
+→ `4401`, missing booking → `4404`, non-participant → `4403`, non-ACCEPTED
+status → `4409`). Identity and send-permission come from the JWT user only —
+any `user_role` in a client payload is ignored. On connect the server sends
+`{"type":"connected","booking_id":…,"role":"expert"|"customer","can_send":bool}`.
+
+### Location message protocol (JSON)
+
+```jsonc
+// assigned expert → server (latitude/longitude required, rest optional)
+{"type":"location_update","latitude":17.3850,"longitude":78.4867,
+ "accuracy":5.0,"heading":90.0,"speed":8.0,"timestamp":"2026-09-29T10:30:00Z"}
+
+// server → every location-channel subscriber of that booking
+// (the expert's own socket receives the broadcast echo too)
+{"type":"location_update","booking_id":101,"expert_id":20,
+ "latitude":17.3850,"longitude":78.4867,"accuracy":5.0,"heading":90.0,
+ "speed":8.0,"timestamp":"..."}
+
+{"type":"ping"}   // → {"type":"pong"}
+{"type":"error","message":"..."}   // validation/rule errors: sender only
+```
+
+Validation (server-side, before anything touches the DB): latitude −90…90,
+longitude −180…180, accuracy ≥ 0, heading 0…360, speed ≥ 0, finite numbers,
+client `timestamp` must not be > 5 min in the future. Customers and any other
+sender get `error: "Only the assigned expert can send location updates."`.
+
+### Update flow & throttling
+
+authenticate → load booking → participant check → ACCEPTED check → parse →
+validate → **throttle gate → insert → commit → broadcast**. A frame that fails
+any step is never broadcast; a failed commit rolls back and errors to the
+sender only. Throttle: at most **one accepted update per booking per
+`LOCATION_UPDATE_INTERVAL_SECONDS`** (default `1`, env-configurable; not a GPS
+sampling rate) — measured on server-side accept time, so client clocks cannot
+buy extra throughput. Too-fast frames are rejected with a clear error and are
+not persisted.
+
+### Database model (`live_locations`)
+
+`id` PK · `booking_id` FK→`bookings.id` (CASCADE, indexed) · `expert_id`
+FK→`users.id` — the expert's **user** id, matching the JWT subject (indexed) ·
+`latitude`/`longitude` Float NOT NULL · `accuracy`/`heading`/`speed` Float
+NULL · `timestamp` DateTime NOT NULL (client fix time or server accept time,
+indexed) · `created_at` DateTime NOT NULL. Created by `create_all` — additive
+only, no existing table or row is ever touched.
+
+### Current + history APIs
+
+- `GET /bookings/{booking_id}/location` — latest fix (`LocationResponse`),
+  404 `NO_LOCATION_AVAILABLE` when nothing has been tracked yet.
+- `GET /bookings/{booking_id}/location/history?limit=100` —
+  `{"booking_id":…,"count":…,"points":[…]}` ordered `timestamp ASC`;
+  `limit` is clamped to 1…500 (422 outside).
+
+### Privacy & retention
+
+Location is booking-scoped and access-controlled on the backend; it is never
+exposed publicly, never broadcast across bookings, and no JWTs/credentials are
+ever stored in location rows. Exact coordinates are not logged. Retention is
+configurable via `LOCATION_HISTORY_RETENTION_DAYS=7`, but **nothing deletes
+automatically** — run the explicit maintenance helper when you choose:
+
+```bash
+.venv\Scripts\python -c "from app.core.database import SessionLocal; from app.services.location_service import purge_expired_locations; print(purge_expired_locations(SessionLocal()))"
+```
+
+### Try it live
+
+```bash
+.venv\Scripts\python scripts\location_test.py   # full two-client acceptance flow (10 checks)
+```
+
+Browser demo: open **`http://127.0.0.1:8000/location-demo`**, paste a booking id
+and JWT (both prefillable via `?booking_id=…&token=…`), and watch `location_update`
+frames arrive in real time — latest fix panel + live event log, keepalive ping,
+reconnect on demand. Connected as the **expert**, the page also shows a send
+panel (manual frame, simulated movement, or the device's real GPS); as the
+customer it is receive-only, mirroring the server's rules.
+
+WebSocket endpoints cannot be executed from Swagger UI — use the script above
+or any WS client with the URL pattern shown here. Swagger documents
+`GET /bookings/{id}/location` and `GET /bookings/{id}/location/history`.
+
+## Phase 6 — Razorpay payments + reviews (COMPLETED bookings only)
+
+**Payments.** A customer pays for a COMPLETED booking:
+
+1. `POST /payments/create-order/{booking_id}` (owner CUSTOMER) — validates
+   eligibility (COMPLETED, not already PAID, amount > 0), creates a Razorpay
+   order via the SDK, and stores a `payments` row (PENDING). The charged
+   amount ALWAYS comes from the booking's `service_price` snapshot — never
+   the request body. Repeat calls reuse the pending order. Returns the
+   Checkout payload including the PUBLIC `key_id` (the secret never leaves
+   the backend).
+2. React opens Razorpay Checkout (`checkout.js`), customer pays.
+3. `POST /payments/verify` — the backend recomputes
+   `HMAC-SHA256(order_id|payment_id, KEY_SECRET)` and compares (constant-time)
+   with the sent `razorpay_signature`. Valid → `payments.status=SUCCESS` +
+   `bookings.payment_status=PAID` (idempotent). Invalid → the payment row is
+   marked FAILED and 400 `INVALID_PAYMENT_SIGNATURE` is returned.
+
+Read endpoints: `GET /payments/{id}` (owner/ADMIN),
+`GET /payments/booking/{id}` (owner/ADMIN), `GET /payments/my-payments`
+(CUSTOMER). No card data is ever stored — only Razorpay ids/signature.
+Without `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET` in `.env`, payment endpoints
+return `503 PAYMENTS_NOT_CONFIGURED` (tests run fully offline via a faked SDK
+client + real HMAC verification).
+
+Error codes: `BOOKING_NOT_FOUND` 404, `BOOKING_ACCESS_DENIED` 403,
+`BOOKING_NOT_COMPLETED` 400, `PAYMENT_ALREADY_COMPLETED` 409, `INVALID_AMOUNT`
+400, `PAYMENT_ORDER_NOT_FOUND` 404, `PAYMENT_ACCESS_DENIED` 403,
+`INVALID_PAYMENT_SIGNATURE` 400, `RAZORPAY_ORDER_ERROR` 502,
+`PAYMENTS_NOT_CONFIGURED` 503.
+
+**Reviews.** After completion the customer reviews the expert:
+
+- `POST /reviews` `{booking_id, rating 1-5, comment?}` — CUSTOMER who owns a
+  COMPLETED booking; one review per booking (409 `REVIEW_ALREADY_EXISTS`);
+  `expert_id` is derived from the booking, never accepted from the body.
+- `GET /reviews/expert/{expert_id}` — **public**; returns
+  `{average_rating, total_reviews, reviews[]}` (newest first, reviewer name).
+- `GET /reviews/booking/{booking_id}` — participants/admin.
+- `PUT /reviews/{id}` / `DELETE /reviews/{id}` — author (or ADMIN); the
+  expert's `rating_avg`/`rating_count` are recalculated on every change.
+
+Rating bounds (1-5) are enforced by Pydantic (422) plus a DB CHECK constraint.
+
+## Phase 6 database changes
+
+Additive and idempotent (no data is ever dropped) — applied automatically at
+startup via `create_all` + `_migrate_phase2`:
+
+- **New table `payments`** — `id, booking_id FK→bookings (CASCADE),
+  customer_id FK→users (RESTRICT), expert_id FK→expert_profiles (RESTRICT),
+  amount DECIMAL(10,2), currency VARCHAR(8), razorpay_order_id VARCHAR(100)
+  UNIQUE, razorpay_payment_id VARCHAR(100) UNIQUE, razorpay_signature
+  VARCHAR(256), status ENUM(PENDING/SUCCESS/FAILED/REFUNDED), payment_method,
+  created_at, updated_at`; index `(booking_id, status)`.
+- **New table `reviews`** — `id, booking_id FK→bookings (CASCADE) UNIQUE,
+  customer_id FK→users (CASCADE), expert_id FK→expert_profiles (CASCADE),
+  rating INT CHECK (1-5), comment VARCHAR(1000), created_at, updated_at`;
+  index `(expert_id, created_at)`.
+- **`bookings` + `payment_status`** — `VARCHAR(20) NOT NULL DEFAULT 'UNPAID'`
+  (legacy rows backfilled to UNPAID; flips to PAID only after verification).
+- **`expert_profiles` + `rating_avg DECIMAL(3,2) NULL`,
+  `rating_count INT NOT NULL DEFAULT 0`** — denormalized from `reviews`, kept
+  consistent by `review_service` inside the same transaction.
+
+## Phase 7 — Gemini LLM assistant (POST /llm/chat)
+
+A JWT-protected AI assistant (CUSTOMER and EXPERT roles; ADMIN → 403) backed
+by **Google Gemini** over its REST API (`generativelanguage.googleapis.com
+/v1beta/models/{GEMINI_MODEL}:generateContent`, called with httpx — no extra
+SDK).
+
+- `POST /llm/chat` `{message, service_context?, history?}` →
+  `{"response": "<clean text>"}` — the raw Gemini payload is never forwarded;
+  only the single clean text is.
+- `message` is required, 1–2000 chars, whitespace-only rejected (422).
+- `history` is optional recent conversation from the client
+  (`[{role: "user"|"assistant", text}]`, max 8 turns, each ≤ 1000 chars) —
+  mapped to Gemini roles (`assistant` → `model`) and truncated server-side to
+  `GEMINI_MAX_HISTORY_TURNS`. **No chat persistence** — Phase 7 adds no tables;
+  the frontend keeps the conversation in React state.
+- The key is read from `GEMINI_API_KEY` (pydantic Settings) and sent only in
+  the upstream URL — never returned to clients, never logged.
+- System prompt ("Smart Home Service Assistant"): general guidance only,
+  explains possible causes, suggests a service category, recommends booking an
+  expert; never claims physical diagnosis, never invents
+  prices/availability/bookings, never claims actions were performed.
+- Error mapping (project `{"error": {code, message}}` idiom):
+  `LLM_NOT_CONFIGURED` 503 (no key), `LLM_AUTH_ERROR` 502 (key rejected —
+  provider detail never leaks), `LLM_RATE_LIMITED` 429, `LLM_UPSTREAM_ERROR`
+  502, `LLM_REQUEST_ERROR` 502, `LLM_UNREACHABLE` 502 (network),
+  `LLM_TIMEOUT` 504, `LLM_EMPTY_RESPONSE` 502.
+- Offline testability: the network boundary `gemini_service._post` is a
+  one-line wrapper that tests replace with a fake (same spirit as the
+  payments suite's fake Razorpay client) — no key, no network.
+
+## Phase 8 connection note
+
+Phase 8 (RAG) will slot in *in front of* this service without changing the
+endpoint contract: question → embedding → ChromaDB search → retrieved context
+→ merged into the Gemini request (`system_instruction`/`contents`) → grounded
+response. `GeminiService.generate_reply` and `/llm/chat` are the seams.
 
 ## Phase 2 database changes
 

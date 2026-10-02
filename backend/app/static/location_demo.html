@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 5 — Live Location Demo</title>
+<style>
+  :root { --ok:#16a34a; --err:#dc2626; --info:#2563eb; --upd:#9333ea; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, "Segoe UI", sans-serif; margin: 0; background: #f4f5f7; color: #111827; }
+  header { background: #111827; color: #fff; padding: 14px 20px; display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  .badge { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: #6b7280; color: #fff; }
+  .badge.connected { background: var(--ok); } .badge.connecting { background: #d97706; }
+  .badge.error, .badge.disconnected { background: var(--err); }
+  main { max-width: 860px; margin: 18px auto; padding: 0 14px; display: grid; gap: 14px; }
+  section { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; }
+  h2 { font-size: 14px; margin: 0 0 10px; color: #374151; text-transform: uppercase; letter-spacing: .04em; }
+  label { font-size: 12px; color: #4b5563; display: block; margin-bottom: 3px; }
+  input { width: 100%; padding: 7px 9px; border: 1px solid #d1d5db; border-radius: 7px; font-size: 13px; }
+  input.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; }
+  .grid5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  button { padding: 8px 14px; border: 0; border-radius: 7px; font-size: 13px; cursor: pointer; background: #2563eb; color: #fff; }
+  button.secondary { background: #6b7280; } button.small { padding: 5px 10px; font-size: 12px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .row-actions { display: flex; gap: 8px; margin-top: 10px; }
+  #fix { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  #fix .cell { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; }
+  #fix .k { font-size: 11px; color: #6b7280; } #fix .v { font-size: 16px; font-weight: 600; font-family: ui-monospace, Consolas, monospace; }
+  #roleInfo { font-size: 12px; color: #6b7280; margin-top: 8px; }
+  #sender.off { opacity: .45; pointer-events: none; }
+  #log { height: 260px; overflow-y: auto; background: #0b1020; border-radius: 8px; padding: 10px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  #log .row { padding: 2px 0; white-space: pre-wrap; word-break: break-all; color: #9ca3af; }
+  #log .location_update { color: #c4b5fd; } #log .connected { color: #6ee7b7; }
+  #log .error { color: #fca5a5; } #log .info { color: #93c5fd; } #log .pong { color: #64748b; }
+  p.hint { font-size: 12px; color: #6b7280; margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Phase 5 — Live Location Demo</h1>
+  <span id="badge" class="badge">disconnected</span>
+</header>
+<main>
+  <section>
+    <h2>Connect</h2>
+    <div class="grid2">
+      <div><label>Booking ID</label><input id="bookingId" type="number" placeholder="e.g. 9"></div>
+      <div><label>JWT (access_token from POST /auth/login)</label><input id="token" class="mono" placeholder="eyJhbGciOiJIUzI1NiIs..."></div>
+    </div>
+    <div class="row-actions">
+      <button id="btnConnect" onclick="connect()">Connect</button>
+      <button id="btnDisconnect" class="secondary" onclick="disconnect()" disabled>Disconnect</button>
+    </div>
+    <p class="hint">Socket: <code>ws://host/ws/bookings/{booking_id}/location?token=&lt;JWT&gt;</code> — only the booking's
+    customer and assigned expert are allowed; the expert is the only sender.</p>
+  </section>
+
+  <section>
+    <h2>Latest fix</h2>
+    <div id="fix">
+      <div class="cell"><div class="k">latitude</div><div class="v" id="fLat">—</div></div>
+      <div class="cell"><div class="k">longitude</div><div class="v" id="fLon">—</div></div>
+      <div class="cell"><div class="k">timestamp</div><div class="v" id="fTs">—</div></div>
+      <div class="cell"><div class="k">accuracy (m)</div><div class="v" id="fAcc">—</div></div>
+      <div class="cell"><div class="k">heading (°)</div><div class="v" id="fHead">—</div></div>
+      <div class="cell"><div class="k">speed (m/s)</div><div class="v" id="fSpd">—</div></div>
+    </div>
+    <div id="roleInfo">not connected</div>
+  </section>
+
+  <section id="sender" class="off">
+    <h2>Send (assigned expert only)</h2>
+    <div class="grid5">
+      <div><label>lat</label><input id="sLat" class="mono" value="17.3850"></div>
+      <div><label>lon</label><input id="sLon" class="mono" value="78.4867"></div>
+      <div><label>accuracy</label><input id="sAcc" class="mono" value="5"></div>
+      <div><label>heading</label><input id="sHead" class="mono" value="90"></div>
+      <div><label>speed</label><input id="sSpd" class="mono" value="8"></div>
+    </div>
+    <div class="row-actions">
+      <button class="small" onclick="sendUpdate()">Send update</button>
+      <button class="small secondary" id="btnSim" onclick="toggleSim()">Simulate movement</button>
+      <button class="small secondary" onclick="useGps()">Use my GPS</button>
+    </div>
+    <p class="hint">Throttled server-side to one accepted update per
+    <code>LOCATION_UPDATE_INTERVAL_SECONDS</code> — too-fast frames come back as error events.</p>
+  </section>
+
+  <section>
+    <h2>Event log (live)</h2>
+    <div id="log"></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+let ws = null, pingTimer = null, simTimer = null;
+const $ = id => document.getElementById(id);
+
+// Prefill from URL, e.g. /location-demo?booking_id=9&token=eyJ...
+window.addEventListener("DOMContentLoaded", () => {
+  const p = new URLSearchParams(location.search);
+  if (p.get("booking_id")) $("bookingId").value = p.get("booking_id");
+  if (p.get("token")) $("token").value = p.get("token");
+});
+
+function log(kind, obj) {
+  const row = document.createElement("div");
+  row.className = "row " + kind;
+  row.textContent = "[" + new Date().toLocaleTimeString() + "] " +
+    (typeof obj === "string" ? obj : JSON.stringify(obj));
+  const box = $("log");
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+}
+
+function setBadge(state) {
+  const b = $("badge");
+  b.textContent = state;
+  b.className = "badge " + state;
+}
+
+function setConnectedUi(on) {
+  $("btnConnect").disabled = on;
+  $("btnDisconnect").disabled = !on;
+  if (!on) {
+    $("sender").classList.add("off");
+    $("roleInfo").textContent = "not connected";
+  }
+}
+
+function wsBase() {
+  return (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host;
+}
+
+function connect() {
+  const id = $("bookingId").value.trim();
+  const token = $("token").value.trim();
+  if (!id || !token) { log("error", "Booking ID and JWT token are both required."); return; }
+  disconnect();  // close any previous socket first
+  const url = wsBase() + "/ws/bookings/" + id + "/location?token=" + encodeURIComponent(token);
+  setBadge("connecting");
+  log("info", "connecting …");
+  try { ws = new WebSocket(url); } catch (e) { setBadge("error"); log("error", String(e)); return; }
+  ws.onopen = () => {
+    setBadge("connected"); setConnectedUi(true);
+    pingTimer = setInterval(() => { if (ws) ws.send(JSON.stringify({ type: "ping" })); }, 25000);
+  };
+  ws.onmessage = e => {
+    let data;
+    try { data = JSON.parse(e.data); } catch { log("error", e.data); return; }
+    log(data.type || "?", data);
+    if (data.type === "connected") {
+      $("roleInfo").textContent = "role: " + data.role + " · can_send: " + data.can_send +
+        " · booking: " + data.booking_id;
+      $("sender").classList.toggle("off", !data.can_send);
+    } else if (data.type === "location_update") {
+      showFix(data);
+    }
+  };
+  ws.onerror = () => setBadge("error");
+  ws.onclose = e => {
+    setBadge("disconnected"); setConnectedUi(false); stopTimers();
+    log("error", "socket closed (code " + e.code + (e.reason ? " — " + e.reason : "") + ")");
+  };
+}
+
+function disconnect() {
+  stopTimers();
+  if (ws) { try { ws.close(); } catch {} ws = null; }
+  setBadge("disconnected"); setConnectedUi(false);
+}
+
+function stopTimers() {
+  if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+  toggleSim(false);
+}
+
+function showFix(d) {
+  $("fLat").textContent = Number(d.latitude).toFixed(6);
+  $("fLon").textContent = Number(d.longitude).toFixed(6);
+  $("fAcc").textContent = d.accuracy == null ? "—" : d.accuracy;
+  $("fHead").textContent = d.heading == null ? "—" : d.heading;
+  $("fSpd").textContent = d.speed == null ? "—" : d.speed;
+  $("fTs").textContent = (d.timestamp || "").replace("T", " ").slice(0, 19);
+}
+
+function sendUpdate() {
+  if (!ws || ws.readyState !== 1) { log("error", "not connected"); return; }
+  const frame = { type: "location_update", latitude: parseFloat($("sLat").value), longitude: parseFloat($("sLon").value) };
+  if (isNaN(frame.latitude) || isNaN(frame.longitude)) { log("error", "latitude and longitude are required numbers."); return; }
+  for (const [key, id] of [["accuracy", "sAcc"], ["heading", "sHead"], ["speed", "sSpd"]]) {
+    const v = parseFloat($(id).value);
+    if (!isNaN(v)) frame[key] = v;
+  }
+  frame.timestamp = new Date().toISOString();
+  ws.send(JSON.stringify(frame));
+}
+
+function toggleSim(force) {
+  const on = force === undefined ? simTimer == null : force;
+  if (on && simTimer == null) {
+    simTimer = setInterval(() => {
+      // Small walk around the start point; server throttle (1/s) is respected.
+      const lat = 17.3850 + (Math.random() - 0.5) * 0.002;
+      const lon = 78.4867 + (Math.random() - 0.5) * 0.002;
+      $("sLat").value = lat.toFixed(6); $("sLon").value = lon.toFixed(6);
+      sendUpdate();
+    }, 1500);
+    $("btnSim").textContent = "Stop simulation";
+  } else if (!on && simTimer != null) {
+    clearInterval(simTimer); simTimer = null;
+    $("btnSim").textContent = "Simulate movement";
+  }
+}
+
+function useGps() {
+  if (!navigator.geolocation) { log("error", "geolocation unavailable in this browser"); return; }
+  const handleSuccess = p => {
+    $("sLat").value = p.coords.latitude.toFixed(6);
+    $("sLon").value = p.coords.longitude.toFixed(6);
+    if (p.coords.accuracy != null) $("sAcc").value = Math.round(p.coords.accuracy);
+    if (p.coords.heading != null && !isNaN(p.coords.heading)) $("sHead").value = p.coords.heading.toFixed(1);
+    if (p.coords.speed != null && !isNaN(p.coords.speed)) $("sSpd").value = p.coords.speed.toFixed(1);
+    log("info", "device position captured — review, then Send update");
+  };
+  navigator.geolocation.getCurrentPosition(
+    handleSuccess,
+    err => {
+      if (err.code === 3 || err.code === 2) {
+        log("info", "high-accuracy GPS timed out; falling back to network/Wi-Fi positioning...");
+        navigator.geolocation.getCurrentPosition(
+          handleSuccess,
+          fallbackErr => log("error", "geolocation error: " + fallbackErr.message),
+          { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
+        );
+      } else {
+        log("error", "geolocation error: " + err.message);
+      }
+    },
+    { enableHighAccuracy: true, timeout: 5000 }
+  );
+}
+</script>
+</body>
+</html>

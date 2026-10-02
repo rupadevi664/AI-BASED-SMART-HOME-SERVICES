@@ -3,7 +3,7 @@ from datetime import date, datetime, time
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.booking import BookingStatus
+from app.models.booking import BookingPaymentStatus, BookingStatus
 from app.schemas.expert import (
     MAX_LATITUDE,
     MAX_LONGITUDE,
@@ -50,6 +50,8 @@ class BookingResponse(BaseModel):
     customer_notes: str | None = None
     status: BookingStatus
     cancellation_reason: str | None = None
+    # Phase 6: UNPAID until a verified Razorpay payment lands.
+    payment_status: BookingPaymentStatus = BookingPaymentStatus.UNPAID
     created_at: datetime
     updated_at: datetime
 

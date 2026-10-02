@@ -43,6 +43,12 @@ class ExpertProfile(Base):
     latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
     # Numeric(11, 7) covers ±180 with the same precision.
     longitude: Mapped[Decimal | None] = mapped_column(Numeric(11, 7), nullable=True)
+    # --- Phase 6: rating aggregate (denormalized from reviews) ---
+    # Kept consistent by review_service on every create/update/delete.
+    # average_rating is NULL until the first review arrives.
+    rating_avg: Mapped[Decimal | None] = mapped_column(Numeric(3, 2), nullable=True)
+    rating_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
     verification_status: Mapped[VerificationStatus] = mapped_column(
         Enum(
             VerificationStatus,

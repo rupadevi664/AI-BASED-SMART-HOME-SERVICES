@@ -20,6 +20,14 @@ class BookingStatus(str, enum.Enum):
     COMPLETED = "COMPLETED"
 
 
+class BookingPaymentStatus(str, enum.Enum):
+    """Booking-level payment state (Phase 6). Legacy rows are UNPAID until a
+    verified Razorpay payment flips them to PAID."""
+
+    UNPAID = "UNPAID"
+    PAID = "PAID"
+
+
 class Booking(Base):
     __tablename__ = "bookings"
 
@@ -62,6 +70,19 @@ class Booking(Base):
     # Used for both customer cancellations and expert rejections.
     cancellation_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
+    # --- Phase 6: payment state (UNPAID until a verified payment lands) ---
+    payment_status: Mapped[BookingPaymentStatus] = mapped_column(
+        Enum(
+            BookingPaymentStatus,
+            native_enum=False,
+            length=20,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        default=BookingPaymentStatus.UNPAID,
+        server_default="UNPAID",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
     )
@@ -73,6 +94,12 @@ class Booking(Base):
     customer: Mapped["User"] = relationship(foreign_keys=[customer_id])  # noqa: F821
     expert: Mapped["ExpertProfile"] = relationship(foreign_keys=[expert_id])  # noqa: F821
     service: Mapped["Service"] = relationship(foreign_keys=[service_id])  # noqa: F821
+    payments: Mapped[list["Payment"]] = relationship(  # noqa: F821
+        foreign_keys="Payment.booking_id",
+        back_populates="booking",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return (

@@ -62,6 +62,8 @@ def read_expert_profile(current_user: User = Depends(get_current_user)) -> dict:
         "longitude": profile.longitude,
         "verification_status": profile.verification_status,
         "availability": profile.availability,
+        "rating_avg": profile.rating_avg,
+        "rating_count": profile.rating_count,
         "services": profile.services,
         "created_at": profile.created_at,
     }
@@ -100,6 +102,8 @@ def update_expert_profile(
         "longitude": profile.longitude,
         "verification_status": profile.verification_status,
         "availability": profile.availability,
+        "rating_avg": profile.rating_avg,
+        "rating_count": profile.rating_count,
         "services": profile.services,
         "created_at": profile.created_at,
     }
@@ -171,6 +175,8 @@ def nearby_experts(
                     "longitude": profile.longitude,
                     "availability": profile.availability,
                     "verification_status": profile.verification_status,
+                    "rating_avg": profile.rating_avg,
+                    "rating_count": profile.rating_count,
                     "distance_km": round(distance, 2),
                     "services": [
                         {"id": link.service.id, "name": link.service.name}
