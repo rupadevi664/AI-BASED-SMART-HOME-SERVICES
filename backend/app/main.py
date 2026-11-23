@@ -17,6 +17,7 @@ from app.api.experts import router as experts_router
 from app.api.llm import router as llm_router
 from app.api.location import router as location_router
 from app.api.messages import router as messages_router
+from app.api.notifications import router as notifications_router
 from app.api.payments import router as payments_router
 from app.api.reviews import router as reviews_router
 from app.api.services import router as services_router
@@ -92,11 +93,18 @@ app = FastAPI(
         "questions and suggests a service category; it never books, pays, or "
         "invents prices/availability. The Gemini key stays on the backend; "
         "without it the endpoint answers 503 `LLM_NOT_CONFIGURED`.\n\n"
+        "**Phase 8:** Retrieval-Augmented Generation grounds that assistant in "
+        "the platform knowledge base — the question is embedded locally "
+        "(all-MiniLM-L6-v2), searched against a ChromaDB collection of "
+        "knowledge-base chunks (explicitly indexed via "
+        "`scripts/index_knowledge.py`), and only relevance-thresholded chunks "
+        "reach the Gemini prompt. Same endpoint, same contract, grounded "
+        "answers.\n\n"
         "**Auth flow:** `POST /auth/login` (or Authorize button) → copy the "
         "`access_token` → click Authorize → paste "
         "`Bearer <access_token>`."
     ),
-    version="7.0.0-phase7",
+    version="8.0.0-phase8",
     lifespan=lifespan,
 )
 
@@ -170,6 +178,7 @@ app.include_router(experts_router)
 app.include_router(bookings_router)
 app.include_router(messages_router)
 app.include_router(location_router)
+app.include_router(notifications_router)
 app.include_router(payments_router)
 app.include_router(reviews_router)
 app.include_router(llm_router)
@@ -181,7 +190,7 @@ def health_check() -> dict:
     return {
         "status": "ok",
         "service": "AI-BASED-SMART-HOME-SERVICES",
-        "phases": [1, 2, 3, 4, 5, 6, 7],
+        "phases": [1, 2, 3, 4, 5, 6, 7, 8],
     }
 
 

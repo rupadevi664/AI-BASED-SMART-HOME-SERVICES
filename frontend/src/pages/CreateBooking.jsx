@@ -1,5 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import {
+  IconAlert,
+  IconArrowRight,
+  IconCalendar,
+  IconClock,
+  IconMapPin,
+  IconShieldCheck,
+  IconUser,
+  IconWrench,
+} from '../components/Icons'
 import { EmptyState } from '../components/Loading'
 import useGeolocation from '../hooks/useGeolocation'
 import { apiError } from '../services/api'
@@ -32,13 +42,10 @@ export default function CreateBooking() {
 
   useEffect(() => {
     listServices().then(setServices).catch(() => {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Preselect the expert's services; if exactly one, lock it in.
   useEffect(() => {
     if (expert?.services?.length === 1 && !serviceId) setServiceId(expert.services[0].id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expert])
 
   async function attachGps() {
@@ -87,9 +94,9 @@ export default function CreateBooking() {
   if (!expert) {
     return (
       <div className="page">
-        <EmptyState title="No expert selected" hint="Pick an expert from the nearby search first.">
+        <EmptyState title="No expert selected" hint="Please pick an expert from the nearby directory first.">
           <button className="btn btn-primary btn-sm" onClick={() => navigate('/customer/experts')}>
-            Find experts
+            Browse Experts
           </button>
         </EmptyState>
       </div>
@@ -97,21 +104,65 @@ export default function CreateBooking() {
   }
 
   const expertServiceIds = new Set((expert.services || []).map((s) => s.id))
-  const filteredServices = serviceId || !state?.serviceId
-    ? services
-    : services.filter((s) => expertServiceIds.has(s.id))
+  const filteredServices =
+    serviceId || !state?.serviceId
+      ? services
+      : services.filter((s) => expertServiceIds.has(s.id))
 
   const minDate = new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 10)
 
   return (
-    <div className="page">
-      <button className="btn btn-outline btn-sm" onClick={() => navigate(-1)}>← Back</button>
-      <h1>Book {expert.name}</h1>
+    <div className="page page-narrow">
+      <button
+        className="btn btn-outline btn-sm"
+        onClick={() => navigate(-1)}
+        style={{ marginBottom: '16px' }}
+      >
+        ← Back
+      </button>
+
+      <div style={{ marginBottom: '20px' }}>
+        <h1 style={{ margin: '0 0 4px' }}>Schedule Appointment</h1>
+        <p className="muted" style={{ margin: 0 }}>
+          Booking verified professional <strong>{expert.name}</strong>
+        </p>
+      </div>
 
       <form className="card form-card" onSubmit={submit}>
-        {error && <div className="alert alert-error">{error}</div>}
+        {error && (
+          <div className="alert alert-error">
+            <IconAlert size={16} />
+            <span>{error}</span>
+          </div>
+        )}
 
-        <label>Service</label>
+        {/* Expert summary chip */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'var(--bg-subtle)',
+            padding: '12px 16px',
+            borderRadius: '12px',
+            marginBottom: '16px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div className="expert-avatar" style={{ width: '36px', height: '36px', fontSize: '13px' }}>
+              {expert.name ? expert.name.slice(0, 2).toUpperCase() : 'EX'}
+            </div>
+            <div>
+              <strong style={{ display: 'block', fontSize: '15px' }}>{expert.name}</strong>
+              <span className="muted tiny">{expert.location}</span>
+            </div>
+          </div>
+          <span className="badge badge-accepted">
+            <IconShieldCheck size={12} /> Verified Pro
+          </span>
+        </div>
+
+        <label>Select Required Service</label>
         <select required value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
           <option value="">Choose a service…</option>
           {(filteredServices.length ? filteredServices : services).map((s) => (
@@ -120,15 +171,23 @@ export default function CreateBooking() {
             </option>
           ))}
         </select>
-        <p className="muted tiny">Only experts who offer the chosen service can be booked (server-validated).</p>
+        <p className="muted tiny" style={{ margin: '4px 0 12px' }}>
+          Upfront locked rate. Payment happens securely after service completion.
+        </p>
 
         <div className="grid-2">
           <div>
-            <label>Date</label>
-            <input type="date" required min={minDate} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+            <label>Preferred Date</label>
+            <input
+              type="date"
+              required
+              min={minDate}
+              value={form.date}
+              onChange={(e) => setForm({ ...form, date: e.target.value })}
+            />
           </div>
           <div>
-            <label>Time</label>
+            <label>Time Window</label>
             <select required value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })}>
               {SLOTS.map((t) => (
                 <option key={t} value={t}>
@@ -139,7 +198,7 @@ export default function CreateBooking() {
           </div>
         </div>
 
-        <label>Service address</label>
+        <label>Service Address / Landmark</label>
         <textarea
           required
           minLength={5}
@@ -147,27 +206,36 @@ export default function CreateBooking() {
           rows={2}
           value={form.address}
           onChange={(e) => setForm({ ...form, address: e.target.value })}
-          placeholder="Flat 402, Green Meadows, Madhapur, Hyderabad"
+          placeholder="e.g. Flat 402, Green Meadows, Madhapur, Hyderabad"
         />
-        <label className="check-row">
-          <input type="checkbox" checked={useGpsForAddress} onChange={(e) => setUseGpsForAddress(e.target.checked)} />
-          Attach my GPS coordinates to the booking
-        </label>
 
-        <label>Notes for the expert (optional)</label>
+        <div style={{ margin: '8px 0 14px' }}>
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={useGpsForAddress}
+              onChange={(e) => setUseGpsForAddress(e.target.checked)}
+            />
+            <span>Include live GPS pin so the expert can navigate to your door</span>
+          </label>
+        </div>
+
+        <label>Additional Notes (Optional)</label>
         <textarea
           rows={2}
           maxLength={1000}
           value={form.notes}
           onChange={(e) => setForm({ ...form, notes: e.target.value })}
-          placeholder="Gate code, floor, problem description…"
+          placeholder="Floor number, gate code, specific symptom or problem details…"
         />
 
-        <button className="btn btn-primary btn-block" disabled={busy || !serviceId}>
-          {busy ? 'Creating booking…' : 'Create booking'}
+        <button className="btn btn-primary btn-block btn-lg" disabled={busy || !serviceId}>
+          {busy ? 'Confirming Appointment…' : 'Confirm & Request Booking'}
+          {!busy && <IconArrowRight size={16} />}
         </button>
-        <p className="muted tiny">
-          The booking starts as <strong>PENDING</strong>; the expert accepts or rejects it.
+
+        <p className="muted tiny center" style={{ marginTop: '12px' }}>
+          The expert will receive your booking request instantly. You can chat with them right after acceptance.
         </p>
       </form>
     </div>

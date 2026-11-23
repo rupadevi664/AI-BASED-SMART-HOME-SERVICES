@@ -12,4 +12,11 @@ python-multipart==0.0.20
 httpx==0.28.1
 razorpay==1.4.2
 setuptools==80.9.0
+# --- Phase 8: RAG (ChromaDB + local ONNX MiniLM embeddings) ---
+chromadb==1.1.0
+onnxruntime==1.30.0
+tokenizers==0.23.2
+huggingface-hub==1.33.0
+grpcio==1.84.0
+typer==0.27.2
 pytest==8.4.2

@@ -12,12 +12,13 @@ import { api } from './api'
  *                                     — server caps at GEMINI_MAX_HISTORY_TURNS.
  * @param {string} [args.serviceContext] Optional context, e.g. the page the
  *                                     customer was viewing.
- * @returns {Promise<string>} The assistant's clean reply text.
+ * @returns {Promise<{response: string, grounded: boolean}>} The assistant's
+ *          clean reply + whether knowledge-base grounding (RAG) was used.
  */
 export async function sendChatMessage({ message, history = [], serviceContext = null }) {
   const payload = { message }
   if (history.length) payload.history = history
   if (serviceContext) payload.service_context = serviceContext
   const { data } = await api.post('/llm/chat', payload)
-  return data.response
+  return { response: data.response, grounded: Boolean(data.grounded) }
 }

@@ -1,8 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
 import BookingCard from '../components/BookingCard'
+import {
+  IconArrowRight,
+  IconBot,
+  IconCalendar,
+  IconCheckCircle,
+  IconClock,
+  IconSparkles,
+  IconWrench,
+} from '../components/Icons'
 import { EmptyState, ErrorState, Spinner } from '../components/Loading'
+import { useAuth } from '../context/AuthContext'
 import { apiError } from '../services/api'
 import { getMyBookings } from '../services/bookingService'
 
@@ -18,34 +27,104 @@ export default function CustomerDashboard() {
   }, [])
 
   const active = (bookings || []).filter((b) => ['PENDING', 'ACCEPTED'].includes(b.status))
+  const completed = (bookings || []).filter((b) => b.status === 'COMPLETED')
 
   return (
     <div className="page">
-      <h1>Welcome, {user?.name?.split(' ')[0]} 👋</h1>
-      <p className="muted">Book trusted home-service experts and follow them in real time.</p>
+      {/* Hero Welcome Banner */}
+      <section className="hero-section">
+        <div className="hero-content">
+          <div className="hero-badge">
+            <IconSparkles size={13} />
+            <span>Smart Home Experience</span>
+          </div>
+          <h1 className="hero-title">Welcome back, {user?.name?.split(' ')[0] || 'Friend'}!</h1>
+          <p className="hero-desc">
+            Instantly connect with verified electricians, plumbers, and home experts with real-time GPS tracking and guaranteed fixed rates.
+          </p>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <Link to="/customer/services" className="btn btn-primary">
+              <IconWrench size={16} />
+              <span>Book a Pro</span>
+            </Link>
+            <Link
+              to="/customer/assistant"
+              className="btn btn-outline"
+              style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', borderColor: 'rgba(255,255,255,0.2)' }}
+            >
+              <IconBot size={16} />
+              <span>Ask AI Diagnostics</span>
+            </Link>
+          </div>
+        </div>
+      </section>
 
-      <div className="quick-actions">
-        <Link to="/customer/services" className="btn btn-primary">🛠️ Book a service</Link>
-        <Link to="/customer/bookings" className="btn btn-outline">📋 My bookings</Link>
+      {/* KPI Stats Grid */}
+      <div className="stat-grid">
+        <div className="stat brand">
+          <div className="stat-header">
+            <span className="stat-label">Active Bookings</span>
+            <IconClock size={18} />
+          </div>
+          <span className="stat-num">{active.length}</span>
+          <span className="muted tiny">In progress or pending</span>
+        </div>
+
+        <div className="stat ok">
+          <div className="stat-header">
+            <span className="stat-label">Completed</span>
+            <IconCheckCircle size={18} />
+          </div>
+          <span className="stat-num">{completed.length}</span>
+          <span className="muted tiny">Successfully serviced</span>
+        </div>
+
+        <div className="stat">
+          <div className="stat-header">
+            <span className="stat-label">Total Requests</span>
+            <IconCalendar size={18} />
+          </div>
+          <span className="stat-num">{(bookings || []).length}</span>
+          <span className="muted tiny">Lifetime orders</span>
+        </div>
       </div>
 
-      <h2>Active bookings</h2>
+      {/* Active Bookings Section */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '24px 0 12px' }}>
+        <h2 style={{ margin: 0 }}>Active Bookings</h2>
+        {bookings && bookings.length > 0 && (
+          <Link to="/customer/bookings" className="small" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span>View all</span>
+            <IconArrowRight size={13} />
+          </Link>
+        )}
+      </div>
+
       {error && <ErrorState message={error} onRetry={() => setError('')} />}
-      {!bookings && !error && <Spinner />}
+      {!bookings && !error && <Spinner label="Loading your dashboard…" />}
+
       {bookings && active.length === 0 && (
-        <EmptyState title="No active bookings" hint="Pick a service to find verified experts near you.">
-          <Link to="/customer/services" className="btn btn-primary btn-sm">Browse services</Link>
+        <EmptyState
+          title="No active bookings right now"
+          hint="Need something fixed? Pick a service and we'll dispatch a top-rated pro."
+          icon="🛠️"
+        >
+          <Link to="/customer/services" className="btn btn-primary btn-sm">
+            Explore Services
+          </Link>
         </EmptyState>
       )}
+
       <div className="cards-grid">
         {active.map((b) => (
           <BookingCard key={b.id} booking={b} perspective="customer" />
         ))}
       </div>
 
+      {/* Booking History Section */}
       {bookings && bookings.length > active.length && (
         <>
-          <h2>History</h2>
+          <h2 style={{ marginTop: '36px' }}>Recent Activity</h2>
           <div className="cards-grid">
             {bookings
               .filter((b) => !['PENDING', 'ACCEPTED'].includes(b.status))

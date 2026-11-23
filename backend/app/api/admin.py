@@ -14,6 +14,7 @@ from app.models.user import UserRole
 from app.schemas.booking import BookingResponse
 from app.schemas.expert import ExpertProfileResponse
 from app.schemas.service import ServiceCreate, ServiceResponse, ServiceUpdate
+from app.services.notification_service import NotificationService
 from app.services.booking_service import BookingService
 
 logger = logging.getLogger(__name__)
@@ -249,6 +250,14 @@ def set_expert_verification(
             detail="Database error, please try again later",
         ) from exc
     db.refresh(profile)
+    NotificationService.create_notification(
+        db,
+        user_id=profile.user_id,
+        title="Verification Status Updated",
+        message=f"Your expert account verification status is now: {profile.verification_status.value}.",
+        type="VERIFICATION_UPDATE",
+        link="/expert/profile",
+    )
     user = profile.user
     return {
         "id": profile.id,

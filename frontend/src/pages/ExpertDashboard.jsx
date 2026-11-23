@@ -1,11 +1,25 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import BookingCard from '../components/BookingCard'
 import { AvailabilityBadge, VerifyBadge } from '../components/Badges'
+import BookingCard from '../components/BookingCard'
+import {
+  IconAlert,
+  IconBriefcase,
+  IconCalendar,
+  IconCheckCircle,
+  IconClock,
+  IconSparkles,
+  IconUser,
+} from '../components/Icons'
 import { EmptyState, ErrorState, Spinner } from '../components/Loading'
 import { useAuth } from '../context/AuthContext'
 import { apiError } from '../services/api'
-import { acceptBooking, completeBooking, getExpertBookings, rejectBooking } from '../services/bookingService'
+import {
+  acceptBooking,
+  completeBooking,
+  getExpertBookings,
+  rejectBooking,
+} from '../services/bookingService'
 
 export default function ExpertDashboard() {
   const { expertProfile, user, refreshUser } = useAuth()
@@ -39,9 +53,9 @@ export default function ExpertDashboard() {
     try {
       if (key === 'accept') {
         await acceptBooking(booking.id)
-        setFlash(`Booking #${booking.id} accepted — chat is open and you can share location once on site.`)
+        setFlash(`Booking #${booking.id} accepted. Chat and live GPS sharing are now available.`)
       } else if (key === 'reject') {
-        const reason = window.prompt('Rejection reason (min 3 characters):')
+        const reason = window.prompt('Rejection reason (minimum 3 characters):')
         if (!reason || reason.trim().length < 3) {
           setBusyId(null)
           return
@@ -50,7 +64,7 @@ export default function ExpertDashboard() {
         setFlash(`Booking #${booking.id} rejected.`)
       } else if (key === 'complete') {
         await completeBooking(booking.id)
-        setFlash(`Booking #${booking.id} marked completed. 🎉`)
+        setFlash(`Booking #${booking.id} marked as completed! Customer can now rate and pay.`)
       }
       await load()
       refreshUser()
@@ -64,16 +78,16 @@ export default function ExpertDashboard() {
   function actionsFor(b) {
     if (b.status === 'PENDING') {
       return [
-        { key: 'accept', label: '✓ Accept', disabled: busyId === b.id },
+        { key: 'accept', label: '✓ Accept Job', disabled: busyId === b.id },
         { key: 'reject', label: '✗ Reject', kind: 'btn-danger', disabled: busyId === b.id },
         { key: 'chat', label: '💬 Chat', kind: 'btn-secondary' },
       ]
     }
     if (b.status === 'ACCEPTED') {
       return [
-        { key: 'complete', label: 'Mark completed', disabled: busyId === b.id },
+        { key: 'complete', label: '✓ Mark Completed', disabled: busyId === b.id },
+        { key: 'track', label: '📍 Share Location', kind: 'btn-outline' },
         { key: 'chat', label: '💬 Chat', kind: 'btn-secondary' },
-        { key: 'track', label: '📍 Share location', kind: 'btn-outline' },
       ]
     }
     return [{ key: 'chat', label: '💬 Chat', kind: 'btn-secondary' }]
@@ -83,39 +97,96 @@ export default function ExpertDashboard() {
 
   return (
     <div className="page">
-      <h1>Expert dashboard</h1>
-      <p className="muted small">
-        {user?.name} · Profile #{expertProfile?.id} <VerifyBadge status={expertProfile?.verification_status} />{' '}
-        <AvailabilityBadge status={expertProfile?.availability} />
-      </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
+        <div>
+          <h1 style={{ margin: '0 0 4px' }}>Expert Dashboard</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span className="muted small">Welcome, {user?.name}</span>
+            <VerifyBadge status={expertProfile?.verification_status} />
+            <AvailabilityBadge status={expertProfile?.availability} />
+          </div>
+        </div>
+
+        <Link to="/expert/profile" className="btn btn-outline btn-sm">
+          <IconUser size={14} />
+          <span>Edit Profile & Services</span>
+        </Link>
+      </div>
 
       {unverified && (
         <div className="alert alert-warn">
-          Your profile is <strong>{expertProfile?.verification_status || 'PENDING'}</strong>. An admin must verify
-          you before customers can book you.
+          <IconAlert size={16} />
+          <span>
+            Your expert profile status is <strong>{expertProfile?.verification_status || 'PENDING'}</strong>. A platform admin must verify your profile before customer bookings go live.
+          </span>
         </div>
       )}
+
       {expertProfile?.availability === 'UNAVAILABLE' && (
         <div className="alert alert-warn">
-          You are currently <strong>UNAVAILABLE</strong> — accept is blocked until you switch availability in
-          <Link to="/expert/profile"> My Profile</Link>.
+          <IconAlert size={16} />
+          <span>
+            You are currently set to <strong>UNAVAILABLE</strong>. You cannot accept new bookings until you toggle to available in{' '}
+            <Link to="/expert/profile" style={{ textDecoration: 'underline' }}>My Profile</Link>.
+          </span>
         </div>
       )}
+
       {flash && <div className="alert alert-ok">{flash}</div>}
       {error && <ErrorState message={error} onRetry={load} />}
 
-      {!bookings && !error && <Spinner />}
+      {/* KPI Stats */}
+      <div className="stat-grid">
+        <div className="stat warn">
+          <div className="stat-header">
+            <span className="stat-label">Pending Requests</span>
+            <IconClock size={18} />
+          </div>
+          <span className="stat-num">{pending.length}</span>
+          <span className="muted tiny">Awaiting your response</span>
+        </div>
 
-      <h2>Incoming requests ({pending.length})</h2>
-      {bookings && pending.length === 0 && <EmptyState title="No pending requests" hint="New requests appear here instantly after you reload." />}
+        <div className="stat brand">
+          <div className="stat-header">
+            <span className="stat-label">Active Jobs</span>
+            <IconBriefcase size={18} />
+          </div>
+          <span className="stat-num">{accepted.length}</span>
+          <span className="muted tiny">In progress on site</span>
+        </div>
+
+        <div className="stat ok">
+          <div className="stat-header">
+            <span className="stat-label">Completed Jobs</span>
+            <IconCheckCircle size={18} />
+          </div>
+          <span className="stat-num">{done.filter((b) => b.status === 'COMPLETED').length}</span>
+          <span className="muted tiny">Fulfilled services</span>
+        </div>
+      </div>
+
+      {!bookings && !error && <Spinner label="Loading expert requests…" />}
+
+      <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span>Incoming Requests</span>
+        <span className="badge badge-pending" style={{ fontSize: '11px' }}>{pending.length}</span>
+      </h2>
+      {bookings && pending.length === 0 && (
+        <EmptyState title="No pending job requests" hint="New customer bookings will appear here instantly." icon="📥" />
+      )}
       <div className="cards-grid">
         {pending.map((b) => (
           <BookingCard key={b.id} booking={b} perspective="expert" actions={actionsFor(b)} onAction={onAction} />
         ))}
       </div>
 
-      <h2>Active jobs ({accepted.length})</h2>
-      {bookings && accepted.length === 0 && <EmptyState title="No active jobs" hint="Accepted bookings show up here." />}
+      <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '36px' }}>
+        <span>Active Jobs</span>
+        <span className="badge badge-accepted" style={{ fontSize: '11px' }}>{accepted.length}</span>
+      </h2>
+      {bookings && accepted.length === 0 && (
+        <EmptyState title="No active jobs right now" hint="Accept an incoming request above to begin work." icon="⚡" />
+      )}
       <div className="cards-grid">
         {accepted.map((b) => (
           <BookingCard key={b.id} booking={b} perspective="expert" actions={actionsFor(b)} onAction={onAction} />
@@ -124,7 +195,7 @@ export default function ExpertDashboard() {
 
       {done.length > 0 && (
         <>
-          <h2>Past</h2>
+          <h2 style={{ marginTop: '36px' }}>Past Job History</h2>
           <div className="cards-grid">
             {done.slice(0, 4).map((b) => (
               <BookingCard key={b.id} booking={b} perspective="expert" actions={actionsFor(b)} onAction={onAction} />

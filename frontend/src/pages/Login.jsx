@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { IconAlert, IconArrowRight, IconHome, IconMail, IconSparkles } from '../components/Icons'
 import { useAuth } from '../context/AuthContext'
 import { apiError } from '../services/api'
 import { getMe, login as loginApi } from '../services/authService'
@@ -29,7 +30,6 @@ export default function Login() {
       const { access_token } = await loginApi(form.email.trim(), form.password)
       const me = await getMe(access_token)
       login(access_token, me)
-      // Honor "from" (protected-route redirect), else role home.
       const from = location.state?.from
       navigate(from && from !== '/login' ? from : ROLE_HOME[me.role] || '/', { replace: true })
     } catch (err) {
@@ -39,26 +39,57 @@ export default function Login() {
     }
   }
 
+  function fillDemo(email, password) {
+    setForm({ email, password })
+  }
+
   return (
     <div className="auth-shell">
-      <form className="card auth-card" onSubmit={submit}>
-        <h2>Welcome back</h2>
-        <p className="muted small">Sign in to book trusted home-service experts.</p>
+      <form className="auth-card" onSubmit={submit}>
+        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+          <div
+            style={{
+              width: '48px',
+              height: '48px',
+              background: 'var(--brand-gradient)',
+              borderRadius: '14px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              marginBottom: '12px',
+              boxShadow: 'var(--shadow-primary)',
+            }}
+          >
+            <IconHome size={24} />
+          </div>
+          <h2 style={{ fontSize: '24px', margin: '0 0 4px' }}>Welcome back</h2>
+          <p className="muted small" style={{ margin: 0 }}>
+            Sign in to access your bookings and smart home services.
+          </p>
+        </div>
 
         {expired && <div className="alert alert-warn">Session expired — please sign in again.</div>}
-        {error && <div className="alert alert-error">{error}</div>}
+        {error && (
+          <div className="alert alert-error">
+            <IconAlert size={16} />
+            <span>{error}</span>
+          </div>
+        )}
 
-        <label>Email</label>
+        <label>Email Address</label>
         <input
           type="email"
           required
           value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
-          placeholder="you@example.com"
+          placeholder="name@example.com"
           autoComplete="email"
         />
 
-        <label>Password</label>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px' }}>
+          <label style={{ margin: 0 }}>Password</label>
+        </div>
         <input
           type="password"
           required
@@ -66,14 +97,35 @@ export default function Login() {
           onChange={(e) => setForm({ ...form, password: e.target.value })}
           placeholder="••••••••"
           autoComplete="current-password"
+          style={{ marginTop: '6px' }}
         />
 
-        <button className="btn btn-primary btn-block" disabled={busy}>
-          {busy ? 'Signing in…' : 'Sign in'}
+        <button className="btn btn-primary btn-block btn-lg" disabled={busy}>
+          {busy ? 'Signing in…' : 'Sign In'}
+          {!busy && <IconArrowRight size={16} />}
         </button>
 
-        <p className="muted small center">
-          New here? <Link to="/register">Create an account</Link>
+        {/* Demo login pills */}
+        <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px dashed var(--line)' }}>
+          <span className="muted tiny" style={{ display: 'block', textAlign: 'center', marginBottom: '8px' }}>
+            Quick fill demo accounts:
+          </span>
+          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+            <button
+              type="button"
+              className="chip-tag tiny"
+              onClick={() => fillDemo('admin123@example.com', 'Rupa@123')}
+            >
+              Admin
+            </button>
+          </div>
+        </div>
+
+        <p className="muted small center" style={{ marginTop: '20px' }}>
+          Don't have an account?{' '}
+          <Link to="/register" style={{ fontWeight: 600 }}>
+            Create one now
+          </Link>
         </p>
       </form>
     </div>

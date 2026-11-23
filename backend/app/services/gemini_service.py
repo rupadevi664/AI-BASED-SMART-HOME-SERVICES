@@ -145,12 +145,18 @@ class GeminiService:
         message: str,
         service_context: str | None = None,
         history: list[dict] | None = None,
+        rag_prompt: str | None = None,
     ) -> str:
         """Send the conversation to Gemini and return the assistant's text.
 
         `history` items are `{"role": "user"|"assistant", "text": ...}` —
         already validated by the schema and truncated to
         GEMINI_MAX_HISTORY_TURNS here as defense in depth.
+
+        Phase 8: `rag_prompt` is the RAG-augmented final turn built by
+        app.rag.rag_service (context + question + instructions). When given,
+        it replaces the plain final user message so Gemini answers from the
+        retrieved knowledge base — Phase 7's plain path remains the fallback.
         """
         if not _key_configured():
             raise _fail_503()
@@ -161,8 +167,8 @@ class GeminiService:
         )
         payload = {
             "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-            "contents": GeminiService._build_contents(message, service_context, history),
-            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 512},
+            "contents": GeminiService._build_contents(message, service_context, history, rag_prompt),
+            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 2048},
         }
 
         try:
@@ -201,6 +207,7 @@ class GeminiService:
         message: str,
         service_context: str | None = None,
         history: list[dict] | None = None,
+        rag_prompt: str | None = None,
     ) -> list[dict]:
         """Map the client conversation to Gemini's `contents` format.
 
@@ -214,6 +221,12 @@ class GeminiService:
         for turn in recent:
             role = "model" if turn.get("role") == "assistant" else "user"
             contents.append({"role": role, "parts": [{"text": turn.get("text", "")}]})
+
+        if rag_prompt:
+            # RAG turn: context + question + grounding instructions as one
+            # user message (the question is already embedded inside it).
+            contents.append({"role": "user", "parts": [{"text": rag_prompt}]})
+            return contents
 
         final = message.strip()
         if service_context and service_context.strip():

@@ -2,7 +2,7 @@ import axios from 'axios'
 
 // Central Axios instance — base URL from env, JWT attached automatically.
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000',
 })
 
 // Attach the JWT to every request.
@@ -51,5 +51,5 @@ api.interceptors.response.use(
 )
 
 // REST base and WebSocket base (ws://host) from env.
-export const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-export const WS_BASE = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8000'
+export const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+export const WS_BASE = import.meta.env.VITE_WS_BASE_URL || 'ws://127.0.0.1:8000'

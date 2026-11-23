@@ -1,9 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import ExpertCard from '../components/ExpertCard'
+import {
+  IconCrosshair,
+  IconFilter,
+  IconMapPin,
+  IconNavigation,
+  IconSearch,
+  IconSparkles,
+} from '../components/Icons'
 import { EmptyState, ErrorState, Spinner } from '../components/Loading'
-import { apiError } from '../services/api'
 import useGeolocation from '../hooks/useGeolocation'
+import { apiError } from '../services/api'
 import { getNearbyExperts } from '../services/expertService'
 
 export default function NearbyExperts() {
@@ -15,27 +23,25 @@ export default function NearbyExperts() {
   const [serviceId, setServiceId] = useState(presetService?.id || '')
   const [serviceName, setServiceName] = useState(presetService?.name || '')
   const [radiusKm, setRadiusKm] = useState(10)
-  // Manual fallback when GPS is unavailable/denied.
   const [manual, setManual] = useState({ lat: '', lng: '' })
   const [experts, setExperts] = useState(null)
   const [searched, setSearched] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  // Pre-locate once on mount (browser may prompt for permission).
+  // Pre-locate once on mount.
   useEffect(() => {
     geo.locate().catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function search(lat = geo.position?.lat, lng = geo.position?.lng) {
-    // Fall back to manually entered coordinates when GPS is missing.
     if ((lat == null || lng == null) && manual.lat !== '' && manual.lng !== '') {
       lat = Number(manual.lat)
       lng = Number(manual.lng)
     }
     if (lat == null || lng == null) {
-      setError('We need your location — allow access, or type coordinates below.')
+      setError('We need your location — click "Get my location" or enter coordinates below.')
       return
     }
     setBusy(true)
@@ -77,56 +83,91 @@ export default function NearbyExperts() {
 
   return (
     <div className="page">
-      <h1>Experts near you</h1>
-      {presetService && (
-        <p className="muted">
-          For <strong>{serviceName}</strong> — change it any time.
+      <div style={{ marginBottom: '20px' }}>
+        <h1 style={{ margin: '0 0 4px' }}>Find Verified Experts</h1>
+        <p className="muted" style={{ margin: 0 }}>
+          {presetService ? (
+            <>
+              Finding nearby professionals for <strong>{serviceName}</strong>.
+            </>
+          ) : (
+            'Browse nearby service pros sorted by distance.'
+          )}
         </p>
-      )}
+      </div>
 
-      <div className="card filter-card">
+      <div className="filter-card">
         <div className="filter-row">
           <div className="filter-item grow">
-            <label>Your location</label>
+            <label>Your Geolocation</label>
             {geo.position ? (
-              <span className="mono small">
-                {geo.position.lat.toFixed(5)}, {geo.position.lng.toFixed(5)}
-                {geo.position.accuracy ? ` (±${Math.round(geo.position.accuracy)}m)` : ''}
-              </span>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: 'var(--bg-subtle)',
+                  padding: '9px 14px',
+                  borderRadius: '10px',
+                  border: '1.5px solid var(--line)',
+                }}
+              >
+                <IconMapPin size={16} className="brand" />
+                <span className="mono small" style={{ fontWeight: 600 }}>
+                  {geo.position.lat.toFixed(4)}, {geo.position.lng.toFixed(4)}
+                </span>
+                {geo.position.accuracy && (
+                  <span className="muted tiny">(±{Math.round(geo.position.accuracy)}m)</span>
+                )}
+              </div>
             ) : (
-              <button className="btn btn-outline btn-sm" onClick={() => geo.locate().catch(() => {})}>
-                📍 Get my location
+              <button
+                className="btn btn-outline"
+                style={{ width: '100%', justifyContent: 'center' }}
+                onClick={() => geo.locate().catch(() => {})}
+              >
+                <IconNavigation size={16} />
+                <span>Detect My Location</span>
               </button>
             )}
-            {geo.error && <p className="danger tiny">{geo.error}</p>}
+            {geo.error && <p className="danger tiny" style={{ marginTop: '4px' }}>{geo.error}</p>}
           </div>
-          <div className="filter-item">
-            <label>Radius: {radiusKm} km</label>
+
+          <div className="filter-item" style={{ minWidth: '160px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <label style={{ margin: 0 }}>Radius</label>
+              <span className="brand small strong">{radiusKm} km</span>
+            </div>
             <input
               type="range"
               min={1}
               max={50}
               value={radiusKm}
               onChange={(e) => setRadiusKm(Number(e.target.value))}
+              style={{ cursor: 'pointer', accentColor: 'var(--brand)', marginTop: '8px' }}
             />
           </div>
+
           <div className="filter-item">
-            <label>Service</label>
+            <label>Service Category</label>
             <select value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
-              <option value="">Any service</option>
+              <option value="">All Services</option>
               {presetService && <option value={presetService.id}>{presetService.name}</option>}
             </select>
           </div>
+
           <div className="filter-item">
             <label>&nbsp;</label>
             <button className="btn btn-primary" disabled={busy} onClick={() => search()}>
-              {busy ? 'Searching…' : 'Search'}
+              <IconSearch size={16} />
+              <span>{busy ? 'Searching…' : 'Find Nearby'}</span>
             </button>
           </div>
         </div>
+
         <details className="manual-coords">
-          <summary className="muted tiny">No GPS? Enter coordinates manually</summary>
-          <div className="filter-row" style={{ marginTop: 8 }}>
+          <summary>Can't access GPS? Enter coordinates manually</summary>
+          <div className="filter-row" style={{ marginTop: '12px' }}>
             <div className="filter-item">
               <label>Latitude</label>
               <input
@@ -134,7 +175,7 @@ export default function NearbyExperts() {
                 step="any"
                 min={-90}
                 max={90}
-                placeholder="17.44000"
+                placeholder="e.g. 17.44000"
                 value={manual.lat}
                 onChange={(e) => setManual({ ...manual, lat: e.target.value })}
               />
@@ -146,7 +187,7 @@ export default function NearbyExperts() {
                 step="any"
                 min={-180}
                 max={180}
-                placeholder="78.39000"
+                placeholder="e.g. 78.39000"
                 value={manual.lng}
                 onChange={(e) => setManual({ ...manual, lng: e.target.value })}
               />
@@ -156,18 +197,20 @@ export default function NearbyExperts() {
       </div>
 
       {error && !experts && <ErrorState message={error} onRetry={() => search()} />}
-      {busy && <Spinner label="Finding experts…" />}
+      {busy && <Spinner label="Scanning nearby verified experts…" />}
 
       {experts && !busy && (
         <>
-          <p className="muted small">
-            {experts.length} expert{experts.length === 1 ? '' : 's'} within {radiusKm} km
-            {serviceId && serviceName ? ` offering ${serviceName}` : ''} — nearest first.
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '24px 0 14px' }}>
+            <p className="muted small" style={{ margin: 0 }}>
+              Found <strong>{experts.length}</strong> verified expert{experts.length === 1 ? '' : 's'} within {radiusKm} km.
+            </p>
+          </div>
           {experts.length === 0 && (
             <EmptyState
-              title="No experts found in this radius"
-              hint="Try a larger radius, or a different service. Only VERIFIED experts with coordinates appear here."
+              title="No experts found in this range"
+              hint="Try extending your search radius to 25 km or 50 km to find available professionals."
+              icon="📍"
             />
           )}
           <div className="cards-grid">
@@ -179,7 +222,11 @@ export default function NearbyExperts() {
       )}
 
       {!searched && !busy && !error && (
-        <EmptyState title="Ready when you are" hint="Allow location access, choose a radius and hit Search." />
+        <EmptyState
+          title="Ready to search"
+          hint="Detect your location or type coordinates, set your radius, and click Find Nearby."
+          icon="🧭"
+        />
       )}
     </div>
   )

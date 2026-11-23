@@ -130,6 +130,27 @@ redirects to `/login`.
   503 `LLM_NOT_CONFIGURED` message when no `GEMINI_API_KEY` is set); a failed
   turn keeps the user's question and drops the pending bubble.
 
+## AI Assistant (Phase 7 + 8)
+
+- **AI Assistant** appears in the customer navbar (`/customer/assistant`,
+  CUSTOMER-only route). Chat bubbles in a card (reusing the Phase 4 chat
+  styles), suggestion chips for common questions, and a **Thinking…** pending
+  bubble while the request runs — the Send button is disabled while busy so
+  duplicates are impossible.
+- **Phase 8:** grounded answers show a `🔎 service knowledge` chip (the
+  backend's `grounded` flag); ungrounded general-knowledge answers show
+  nothing. The UI otherwise doesn't change — RAG is invisible except for the
+  better answers.
+- The conversation lives in React state (max 8 turns sent as `history`,
+  each truncated to 2000 chars to match the backend cap); a **Clear
+  conversation** button resets it. Nothing is persisted.
+- Calls `POST /llm/chat` through the shared `api` client (JWT attached
+  automatically) via `src/services/llmService.js` — no duplicate axios
+  config, and the Gemini key is backend-only (never in frontend code or
+  responses).
+- Errors surface as a friendly alert line above the input; a failed turn
+  keeps the user's question and drops the pending bubble.
+
 ## Demo script (2 browsers or normal + incognito)
 
 1. Register a customer (Customer tab) and an expert (Expert tab).

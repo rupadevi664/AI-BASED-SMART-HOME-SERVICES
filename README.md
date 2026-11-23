@@ -5,7 +5,111 @@ An intelligent home-service platform where customers can find and book **verifie
 > **Current status: Phase 1 (foundation) + Phase 2 (discovery) + Phase 3
 > (booking) + Phase 4 (real-time chat) + Phase 5 (live location tracking) +
 > Phase 6 (Razorpay payments + reviews/ratings) + Phase 7 (Gemini AI
-> assistant) + React frontend — complete.**
+> assistant) + Phase 8 (RAG + ChromaDB) + Phase 9 (Real-time Notifications) + React frontend — complete.**
+
+## 📸 Platform Walkthrough & Screenshots
+
+A comprehensive, line-wise visual tour of the platform across customer, expert, and administrator workflows:
+
+---
+
+### 1. Authentication & Secure Portal Access
+Modern split-screen authentication with role-based routing (`CUSTOMER`, `EXPERT`, `ADMIN`), form validations, and JWT session handling.
+
+![01. Login Portal](screenshots/01_login_portal.png)
+
+---
+
+### 2. User & Expert Registration
+Onboarding flow for new homeowners and service professionals with role selection and instant profile setup.
+
+![02. User Registration](screenshots/02_user_registration.png)
+
+---
+
+### 3. Customer Dashboard & KPI Overview
+Personalized homeowner dashboard highlighting active bookings, quick service shortcuts, verified expert status, and live alert counters.
+
+![03. Customer Dashboard](screenshots/03_customer_home.png)
+
+---
+
+### 4. Service Catalogue & Categorized Pricing
+Browse verified home services (Electrical, Plumbing, AC Repair, Smart Home Setup, Cleaning, Carpentry) with transparent pricing, estimated durations, and instant booking shortcuts.
+
+![04. Service Catalogue](screenshots/04_service_catalog.png)
+
+---
+
+### 5. Nearby Verified Expert Discovery
+Haversine-powered geolocation search displaying nearby rated technicians with distance calculation, verified badges, rating summaries, and available slots.
+
+![05. Expert Discovery](screenshots/05_expert_discovery.png)
+
+---
+
+### 6. Appointment Booking & Schedule Confirmation
+Comprehensive booking modal with selected technician profile, date/time slot picker, service address, and optional GPS geolocation tagging.
+
+![06. Schedule Booking](screenshots/06_schedule_booking.png)
+
+---
+
+### 7. Customer Booking Management
+Manage active and historical bookings with real-time status badges (`PENDING`, `ACCEPTED`, `COMPLETED`), cancellation actions, payment checkout, and service reviews.
+
+![07. My Bookings](screenshots/07_my_bookings.png)
+
+---
+
+### 8. Smart Home AI Copilot & Diagnostics
+Google Gemini-powered intelligent home service assistant with Retrieval-Augmented Generation (RAG) grounded in local knowledge bases for troubleshooting appliances, electrical issues, and plumbing leaks.
+
+![08. AI Assistant Copilot](screenshots/08_ai_assistant_copilot.png)
+
+---
+
+### 9. Real-Time In-App WebSocket Chat
+Low-latency bidirectional WebSocket messaging between the customer and assigned expert for the active booking, featuring live delivery status and persistent message logs.
+
+![09. Real-time Chat](screenshots/09_realtime_chat.png)
+
+---
+
+### 10. Live Expert GPS Tracking on OpenStreetMap
+Live map visualization displaying real-time technician movement, route updates, distance metrics, and destination pin via high-frequency WebSocket streams.
+
+![10. Live GPS Tracking](screenshots/10_live_gps_tracking.png)
+
+---
+
+### 11. Real-Time Notifications Center
+In-app notification system alerting users of booking status updates, technician arrivals, payments, and system notices with unread badges and direct navigation links.
+
+![11. Notification Center](screenshots/11_notification_center.png)
+
+---
+
+### 12. Service Expert Dashboard
+Technician workspace featuring assigned jobs, incoming booking requests, one-click accept/reject controls, live status management, and performance stats.
+
+![12. Expert Dashboard](screenshots/12_expert_dashboard.png)
+
+---
+
+### 13. Expert Profile & Availability Management
+Profile management interface for technicians to update skill sets, years of experience, operational radius, coordinates, and real-time availability toggle.
+
+![13. Expert Profile](screenshots/13_expert_profile.png)
+
+---
+
+### 14. Administrator Control Center & System Oversight
+Central admin dashboard featuring platform-wide KPI counters, expert credential verification approvals (`VERIFIED`, `REJECTED`), and user management.
+
+![14. Admin Dashboard](screenshots/14_admin_dashboard.png)
+
+---
 
 ## What's implemented
 
@@ -77,6 +181,19 @@ create bookings/payments or invent prices/availability. The React app adds
 an **AI Assistant** page (chat bubbles, Thinking… state, friendly errors).
 No database changes — conversation stays in React state.
 
+**Phase 8** — **RAG (Retrieval-Augmented Generation)** grounds the Phase 7
+assistant in a platform knowledge base (`knowledge_base/*.md`: plumbing,
+electrical, AC repair, cleaning, appliance repair, home maintenance, safety,
+FAQ). Documents are markdown-section chunked (size 800 / overlap 100),
+embedded **locally** (all-MiniLM-L6-v2 ONNX via ChromaDB — no API key), and
+stored in a persistent ChromaDB collection (index explicitly via
+`python scripts/index_knowledge.py` — never at startup). `POST /llm/chat`
+now embeds the question, retrieves the top-3 chunks above a calibrated
+cosine-distance threshold (0.85), and builds a grounded Gemini prompt;
+unrelated questions retrieve nothing and fall back to general knowledge with
+`"grounded": false`. The endpoint contract is otherwise unchanged; retrieval
+failures degrade gracefully to non-grounded chat.
+
 **Frontend (React + Vite)** — a `frontend/` SPA connected to this backend:
 JWT auth with role-guarded routes (CUSTOMER/EXPERT/ADMIN), service catalogue,
 Haversine nearby-expert search (browser GPS or manual coordinates), booking
@@ -86,8 +203,13 @@ streams `navigator.geolocation` positions over the Phase 5 WebSocket and the
 customer's marker moves in real time. See `frontend/.env.example` and the
 backend README for run instructions.
 
-Not yet (later phases): RAG/embeddings/ChromaDB (Phase 8 — will reuse the
-Phase 7 `gemini_service` as the generation step), notifications, deployment.
+**Phase 9** — **Real-Time Notifications System**: end-to-end notification
+service (`/notifications`, unread counters, mark as read, read-all, delete),
+real-time event triggers fired on booking acceptance, payment verification,
+review submissions, and admin approvals, with an interactive notification bell
+and floating dropdown alert center in the React navigation header.
+
+Not yet (later phases): deployment (Phase 10).
 
 ## Quick start
 
@@ -105,7 +227,9 @@ uvicorn app.main:app --reload   # http://127.0.0.1:8000/docs
 
 ```bash
 cd backend
-.venv\Scripts\python -m pytest -v                 # 269 automated tests (no MySQL needed)
+.venv\Scripts\python -m pytest -v                 # 286 automated tests (no MySQL needed)
+.venv\Scripts\python scripts\index_knowledge.py   # (re)index RAG knowledge base into ChromaDB
+.venv\Scripts\python scripts\index_knowledge.py --demo  # show retrieval examples
 .venv\Scripts\python scripts\live_acceptance.py   # 77 live checks vs running server
 .venv\Scripts\python scripts\setup_chat_booking.py        # chat fixtures + booking id
 .venv\Scripts\python scripts\websocket_test.py [id]       # two-client chat flow

@@ -15,10 +15,15 @@ MAX_HISTORY_TURNS = 8
 
 
 class ChatTurn(BaseModel):
-    """One earlier exchange in the client-side conversation."""
+    """One earlier exchange in the client-side conversation.
+
+    text is capped at 2000 (the same as LLMRequest.message): assistant replies
+    legitimately run longer than the question, and the whole exchange is
+    re-sent as history on follow-ups.
+    """
 
     role: Literal["user", "assistant"]
-    text: str = Field(min_length=1, max_length=1000)
+    text: str = Field(min_length=1, max_length=2000)
 
     @field_validator("text")
     @classmethod
@@ -60,6 +65,11 @@ class LLMRequest(BaseModel):
 
 
 class LLMResponse(BaseModel):
-    """Exactly one clean assistant text — nothing else leaks from Gemini."""
+    """One clean assistant text + whether knowledge-base grounding was used.
+
+    `grounded` is informational (the UI may show "answer generated using
+    service knowledge"); it never changes the response contract.
+    """
 
     response: str = Field(min_length=1)
+    grounded: bool = False

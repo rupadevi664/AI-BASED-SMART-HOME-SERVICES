@@ -66,6 +66,25 @@ class Settings(BaseSettings):
     # Maximum conversation turns the client may send as history (last N kept).
     GEMINI_MAX_HISTORY_TURNS: int = 8
 
+    # --- Phase 8: RAG (retrieval-augmented generation) ---
+    # Knowledge base + ChromaDB paths (relative to backend/).
+    RAG_KB_DIR: str = "knowledge_base"
+    RAG_CHROMA_DIR: str = "chroma_data"
+    RAG_COLLECTION_NAME: str = "home_services_kb"
+    # Chunking: markdown sections split on "## " headings; oversized sections
+    # are windowed with overlap. In characters (local MiniLM handles this well).
+    RAG_CHUNK_SIZE: int = 800
+    RAG_CHUNK_OVERLAP: int = 100
+    # Retrieval: candidates fetched per query and the cosine-distance relevance
+    # threshold (0 = identical, 2 = opposite). Calibrated on the demo queries:
+    # relevant chunks score ~0.24-0.67, unrelated questions ~0.94+ → 0.85 sits
+    # in the gap with margin on both sides.
+    RAG_TOP_K: int = 3
+    RAG_MAX_DISTANCE: float = 0.85
+    # Local ONNX all-MiniLM-L6-v2 (384-dim, bundled with ChromaDB) — no API key.
+    # Swap to a Google embedding model here if ever desired.
+    RAG_EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
+
 
 @lru_cache
 def get_settings() -> Settings:

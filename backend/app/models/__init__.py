@@ -4,6 +4,7 @@ from app.models.booking import Booking, BookingPaymentStatus, BookingStatus
 from app.models.expert import AvailabilityStatus, ExpertProfile, VerificationStatus
 from app.models.location import LiveLocation
 from app.models.message import Message
+from app.models.notification import Notification
 from app.models.payment import Payment, PaymentStatus
 from app.models.review import Review
 from app.models.service import Service, ServiceStatus
@@ -18,6 +19,7 @@ __all__ = [
     "ExpertService",
     "LiveLocation",
     "Message",
+    "Notification",
     "Payment",
     "PaymentStatus",
     "Review",

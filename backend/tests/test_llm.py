@@ -125,9 +125,16 @@ class TestValidation:
         assert response.status_code == 422
 
     def test_history_turn_overlong_422(self, client, world):
-        history = [{"role": "user", "text": "x" * 1001}]
+        history = [{"role": "assistant", "text": "x" * 2001}]
         response = _chat(client, world["customer_token"], "again?", history=history)
         assert response.status_code == 422
+
+    def test_long_assistant_reply_accepted_as_history(self, client, world, fake_gemini):
+        """Assistant replies exceed 1000 chars legitimately — the 2000 cap
+        must accept them (regression for the follow-up-question bug)."""
+        history = [{"role": "assistant", "text": "y" * 1500}]
+        response = _chat(client, world["customer_token"], "Which expert should I book?", history=history)
+        assert response.status_code == 200
 
     def test_bad_history_role_422(self, client, world):
         response = _chat(
@@ -150,14 +157,15 @@ class TestChat:
         response = _chat(client, world["customer_token"], "My AC is not cooling")
         assert response.status_code == 200
         body = response.json()
-        # Only the clean text — never the raw provider payload.
-        assert set(body.keys()) == {"response"}
+        # Clean envelope only — never the raw provider payload. Phase 8 adds
+        # the informational `grounded` flag.
+        assert set(body.keys()) == {"response", "grounded"}
         assert "air filter" in body["response"]
 
     def test_request_hits_gemini_with_key_and_model(self, client, world, fake_gemini):
         _chat(client, world["customer_token"], "My pipe is leaking")
         request = fake_gemini.requests[0]
-        assert "/models/gemini-2.0-flash:generateContent" in request["url"]
+        assert f"/models/{settings.GEMINI_MODEL}:generateContent" in request["url"]
         assert "key=fake-test-key" in request["url"]
         # The key travels in the URL only — never inside the request body.
         assert "fake-test-key" not in str(request["body"])
@@ -168,7 +176,10 @@ class TestChat:
         assert "Smart Home Service Assistant" in body["system_instruction"]["parts"][0]["text"]
         contents = body["contents"]
         assert contents[-1]["role"] == "user"
-        assert contents[-1]["parts"][0]["text"].endswith("wiring?")
+        # Phase 8: the final turn is the RAG prompt embedding the question;
+        # history turns (if any) come before it.
+        assert "wiring?" in contents[-1]["parts"][0]["text"]
+        assert "Retrieved Context:" in contents[-1]["parts"][0]["text"]
 
     def test_service_context_appended(self, client, world, fake_gemini):
         _chat(

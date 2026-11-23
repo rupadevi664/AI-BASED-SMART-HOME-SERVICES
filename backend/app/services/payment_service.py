@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models import Booking, BookingPaymentStatus, Payment, PaymentStatus, User
+from app.services.notification_service import NotificationService
 from app.services.booking_service import _fail
 
 logger = logging.getLogger(__name__)
@@ -198,6 +199,24 @@ class PaymentService:
             logger.exception("Database error finalizing payment")
             raise _fail("PAYMENT_DB_ERROR", 500, "Database error, please try again later") from exc
         db.refresh(payment)
+        NotificationService.create_notification(
+            db,
+            user_id=payment.customer_id,
+            title="Payment Successful",
+            message=f"Your payment of ₹{payment.amount} for {payment.booking.service_name} was successful.",
+            type="PAYMENT_SUCCESS",
+            link="/customer/bookings",
+        )
+        expert_user_id = payment.booking.expert.user_id if (payment.booking and payment.booking.expert) else None
+        if expert_user_id:
+            NotificationService.create_notification(
+                db,
+                user_id=expert_user_id,
+                title="Payment Received",
+                message=f"Payment of ₹{payment.amount} received for booking #{payment.booking_id}.",
+                type="PAYMENT_SUCCESS",
+                link="/expert/bookings",
+            )
         return payment
 
     # ---------------------------------------------------------------- queries

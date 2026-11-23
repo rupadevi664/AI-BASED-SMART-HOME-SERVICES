@@ -115,6 +115,17 @@ GEMINI_MODEL=gemini-2.0-flash
 GEMINI_TIMEOUT_SECONDS=20
 GEMINI_MAX_HISTORY_TURNS=8
 
+# Phase 8: RAG over knowledge_base/*.md (local embeddings, no API key).
+# (Re)index after editing knowledge base documents:
+#   python scripts/index_knowledge.py
+RAG_KB_DIR=knowledge_base
+RAG_CHROMA_DIR=chroma_data
+RAG_COLLECTION_NAME=home_services_kb
+RAG_CHUNK_SIZE=800
+RAG_CHUNK_OVERLAP=100
+RAG_TOP_K=3
+RAG_MAX_DISTANCE=0.85
+
 # Phase 5: live location
 LOCATION_UPDATE_INTERVAL_SECONDS=1
 LOCATION_HISTORY_RETENTION_DAYS=7
@@ -143,7 +154,7 @@ exactly once. **No data is ever dropped.**
 
 ```bash
 cd backend
-.venv\Scripts\python -m pytest -v        # 269 tests, SQLite in-memory, no creds
+.venv\Scripts\python -m pytest -v        # 286 tests, SQLite in-memory, no creds
 .venv\Scripts\python scripts\live_acceptance.py   # 77 checks vs a running server
 .venv\Scripts\python scripts\setup_chat_booking.py # mint customer/expert/booking for chat
 .venv\Scripts\python scripts\websocket_test.py [booking_id]   # two-client chat flow
@@ -527,12 +538,55 @@ SDK).
   one-line wrapper that tests replace with a fake (same spirit as the
   payments suite's fake Razorpay client) — no key, no network.
 
-## Phase 8 connection note
+## Phase 8 — RAG (Retrieval-Augmented Generation)
 
-Phase 8 (RAG) will slot in *in front of* this service without changing the
-endpoint contract: question → embedding → ChromaDB search → retrieved context
-→ merged into the Gemini request (`system_instruction`/`contents`) → grounded
-response. `GeminiService.generate_reply` and `/llm/chat` are the seams.
+Grounds the Phase 7 assistant in `knowledge_base/*.md` (plumbing, electrical,
+ac_repair, cleaning, appliance_repair, home_maintenance, faq, safety). The
+`POST /llm/chat` contract is unchanged apart from the added `"grounded":
+<bool>` flag; there is no `/rag/chat` — retrieval happens *in front of*
+`GeminiService.generate_reply` via its `rag_prompt` seam.
+
+Pipeline (`app/rag/`):
+
+1. **document_loader** — reads every `*.md` from `RAG_KB_DIR` (explicit only;
+   never per request), maps filenames to category metadata.
+2. **chunker** — splits on `## ` markdown headings (one coherent topic per
+   chunk: problem/causes/safety stay together), then windows oversized
+   sections (RAG_CHUNK_SIZE=800 chars, overlap 100); every chunk is prefixed
+   with its category for better short-query embeddings.
+3. **embeddings** — **local ONNX all-MiniLM-L6-v2** (384-dim, bundled with
+   ChromaDB, downloaded once to `~/.cache/chroma`); no API key, no network at
+   request time.
+4. **vector_store** — persistent ChromaDB at `RAG_CHROMA_DIR`
+   (`backend/chroma_data`, gitignored), cosine space, deterministic chunk ids
+   so re-indexing overwrites instead of duplicating; never re-indexed at
+   startup.
+5. **retriever** — top-K (RAG_TOP_K=3) similarity search with optional
+   category metadata filter; drops hits with cosine distance >
+   RAG_MAX_DISTANCE (0.85) so unrelated questions never pollute the prompt.
+6. **rag_service** — builds the grounded prompt (retrieved context + question
+   + grounding instructions); when nothing relevant is found it tells Gemini
+   to answer from general knowledge and say the guide does not cover it.
+   Embedding/Chroma failures degrade to non-grounded chat instead of erroring.
+
+Indexing (explicit, idempotent):
+
+```bash
+cd backend
+PYTHONPATH=. .venv\Scripts\python scripts\index_knowledge.py          # re-index (52 chunks from 8 docs)
+PYTHONPATH=. .venv\Scripts\python scripts\index_knowledge.py --demo   # retrieval examples + distances
+```
+
+Calibration (demo output, cosine distance): relevant hits 0.24–0.67,
+unrelated questions ("capital of France") 0.94+ → threshold 0.85. Retrieval
+is logged server-side (`Retrieved 1. plumbing.md chunk 2 (distance 0.241)`)
+but internal details never reach clients.
+
+## Phase 8 dependencies (requirements.txt)
+
+`chromadb==1.1.0` pulls the local embedding stack; pinned direct deps:
+onnxruntime 1.30.0, tokenizers 0.23.2, huggingface-hub 1.33.0, grpcio 1.84.0,
+typer 0.27.2. First embedding use downloads the ~79 MB MiniLM model once.
 
 ## Phase 2 database changes
 

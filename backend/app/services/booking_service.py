@@ -15,6 +15,7 @@ from app.models import Booking, BookingStatus, ExpertProfile, Service, User
 from app.models.expert import AvailabilityStatus, VerificationStatus
 from app.models.service import ServiceStatus
 from app.schemas.booking import BookingCreate, _floor_to_slot
+from app.services.notification_service import NotificationService
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,14 @@ class BookingService:
             logger.exception("Database error creating booking")
             raise _fail("BOOKING_DB_ERROR", 500, "Database error, please try again later") from exc
         db.refresh(booking)
+        NotificationService.create_notification(
+            db,
+            user_id=expert.user_id,
+            title="New Booking Request",
+            message=f"Customer {customer.name} booked {service.name} for {payload.scheduled_date} at {str(payload.scheduled_time)[:5]}.",
+            type="BOOKING_CREATED",
+            link="/expert/bookings",
+        )
         return booking
 
     # ------------------------------------------------------------- validations
@@ -164,6 +173,53 @@ class BookingService:
             logger.exception("Database error during booking transition")
             raise _fail("BOOKING_DB_ERROR", 500, "Database error, please try again later") from exc
         db.refresh(booking)
+        # Dispatch transition alerts
+        expert_profile = db.get(ExpertProfile, booking.expert_id)
+        expert_user_id = expert_profile.user_id if expert_profile else None
+
+        if new_status == BookingStatus.ACCEPTED:
+            NotificationService.create_notification(
+                db,
+                user_id=booking.customer_id,
+                title="Booking Accepted",
+                message=f"Your booking #{booking.id} for {booking.service_name} has been accepted by the expert.",
+                type="BOOKING_ACCEPTED",
+                link="/customer/bookings",
+            )
+        elif new_status == BookingStatus.REJECTED:
+            msg = f"Your booking #{booking.id} for {booking.service_name} was declined."
+            if reason:
+                msg += f" Reason: {reason}"
+            NotificationService.create_notification(
+                db,
+                user_id=booking.customer_id,
+                title="Booking Declined",
+                message=msg,
+                type="BOOKING_REJECTED",
+                link="/customer/bookings",
+            )
+        elif new_status == BookingStatus.CANCELLED:
+            if expert_user_id:
+                msg = f"Booking #{booking.id} for {booking.service_name} was cancelled by the customer."
+                if reason:
+                    msg += f" Reason: {reason}"
+                NotificationService.create_notification(
+                    db,
+                    user_id=expert_user_id,
+                    title="Booking Cancelled",
+                    message=msg,
+                    type="BOOKING_CANCELLED",
+                    link="/expert/bookings",
+                )
+        elif new_status == BookingStatus.COMPLETED:
+            NotificationService.create_notification(
+                db,
+                user_id=booking.customer_id,
+                title="Service Completed",
+                message=f"Your {booking.service_name} service is marked completed! Please complete payment and leave a review.",
+                type="BOOKING_COMPLETED",
+                link="/customer/bookings",
+            )
         return booking
 
     # ---------------------------------------------------------------- listings

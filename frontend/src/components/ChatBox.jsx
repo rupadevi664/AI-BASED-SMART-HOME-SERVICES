@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { IconChat, IconClock, IconSend, IconShieldCheck } from './Icons'
 import { useAuth } from '../context/AuthContext'
 import { apiError } from '../services/api'
 import { getBooking } from '../services/bookingService'
@@ -41,22 +42,25 @@ export default function ChatBox({ bookingId }) {
         onEvent: (ev) => {
           if (cancelled) return
           if (ev.type === 'message') {
-            // WS frames carry no DB id — dedupe on content+sender+timestamp
-            // (REST history rows use created_at, WS frames use timestamp).
             setMessages((prev) => {
               if (ev.id != null && prev.some((m) => m.id === ev.id)) return prev
               const key = `${ev.sender_id}|${ev.timestamp}|${ev.message}`
-              if (prev.some((m) => `${m.sender_id}|${m.timestamp || m.created_at}|${m.message}` === key)) return prev
+              if (
+                prev.some(
+                  (m) => `${m.sender_id}|${m.timestamp || m.created_at}|${m.message}` === key,
+                )
+              )
+                return prev
               return [...prev, ev]
             })
           } else if (ev.type === 'user_joined') {
-            setSystem((s) => [...s, `User #${ev.user_id} joined`])
+            setSystem((s) => [...s, `User #${ev.user_id} joined the room`])
           } else if (ev.type === 'user_left') {
-            setSystem((s) => [...s, `User #${ev.user_id} left`])
+            setSystem((s) => [...s, `User #${ev.user_id} left the room`])
           } else if (ev.type === 'error') {
             setNotice(ev.message)
           } else if (ev.type === 'ws_gave_up') {
-            setNotice('Live connection unavailable — showing history only. Retry from the bookings page.')
+            setNotice('Live connection unavailable — showing history only.')
           }
         },
         onStatus: setStatus,
@@ -86,45 +90,74 @@ export default function ChatBox({ bookingId }) {
   }
 
   const statusChip = {
-    connected: ['chip-ok', 'Live'],
-    connecting: ['chip-warn', 'Connecting…'],
-    closed: ['chip-warn', 'Reconnecting…'],
-    error: ['chip-err', 'Connection error'],
-  }[status] || ['chip-warn', status]
+    connected: ['badge-accepted', 'Live Channel'],
+    connecting: ['badge-pending', 'Connecting…'],
+    closed: ['badge-pending', 'Reconnecting…'],
+    error: ['badge-rejected', 'Offline'],
+  }[status] || ['badge-pending', status]
 
   return (
     <div className="chat-wrap card">
-      <div className="card-head">
-        <div>
-          <h3>Chat — Booking #{bookingId}</h3>
-          {booking && (
-            <p className="muted small">
-              {booking.service_name} · {booking.status}
-            </p>
-          )}
+      <div className="card-head" style={{ borderBottom: '1px solid var(--line)', paddingBottom: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              background: 'var(--brand-light)',
+              color: 'var(--brand)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <IconChat size={20} />
+          </div>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '17px' }}>Booking #{bookingId} Chat</h3>
+            {booking && (
+              <p className="muted tiny" style={{ margin: 0 }}>
+                {booking.service_name} · Status: <strong>{booking.status}</strong>
+              </p>
+            )}
+          </div>
         </div>
-        <span className={`chip ${statusChip[0]}`}>{statusChip[1]}</span>
+
+        <span className={`badge ${statusChip[0]}`}>
+          <span className="badge-dot" />
+          <span>{statusChip[1]}</span>
+        </span>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
 
       <div className="chat-scroll">
         {messages.length === 0 && system.length === 0 && !error && (
-          <p className="muted center">No messages yet — say hello 👋</p>
+          <div className="state" style={{ background: 'transparent', border: 'none', padding: '40px 10px' }}>
+            <span style={{ fontSize: '32px', display: 'block', marginBottom: '8px' }}>💬</span>
+            <strong>No messages yet</strong>
+            <p className="muted small">Start the conversation with your service counterpart.</p>
+          </div>
         )}
+
         {messages.map((m, i) => {
           const mine = m.sender_id === user?.id
+          const time = new Date(m.timestamp || m.created_at).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          })
           return (
             <div key={m.id || `m${i}`} className={`bubble ${mine ? 'mine' : 'theirs'}`}>
               <div className="bubble-meta">
                 {mine ? 'You' : `User #${m.sender_id}`}
-                {m.sender_role ? ` · ${m.sender_role}` : ''} ·{' '}
-                {new Date(m.timestamp || m.created_at).toLocaleTimeString()}
+                {m.sender_role ? ` (${m.sender_role})` : ''} · {time}
               </div>
-              {m.message || m.text}
+              <div style={{ wordBreak: 'break-word' }}>{m.message || m.text}</div>
             </div>
           )
         })}
+
         {system.map((s, i) => (
           <div key={`s${i}`} className="system-line">
             {s}
@@ -139,17 +172,15 @@ export default function ChatBox({ bookingId }) {
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={status === 'connected' ? 'Type a message…' : 'Waiting for connection…'}
+          placeholder={status === 'connected' ? 'Type a secure message…' : 'Waiting for connection…'}
           maxLength={2000}
           disabled={status !== 'connected'}
         />
         <button className="btn btn-primary" disabled={status !== 'connected' || !text.trim()}>
-          Send
+          <IconSend size={15} />
+          <span>Send</span>
         </button>
       </form>
-      <p className="muted tiny">
-        Messages persist server-side; history loads via GET /bookings/{bookingId}/messages.
-      </p>
     </div>
   )
 }

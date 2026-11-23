@@ -29,3 +29,9 @@ Thumbs.db
 # Logs / local artifacts
 *.log
 *.db
+.freebuff/
+.puppeteer*
+screenshots_tokens.json
+
+# RAG vector store (local ChromaDB persistence — rebuild with the index script)
+backend/chroma_data/

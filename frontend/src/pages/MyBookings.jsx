@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import BookingCard from '../components/BookingCard'
+import { IconCalendar, IconFilter, IconSparkles } from '../components/Icons'
 import { EmptyState, ErrorState, Spinner } from '../components/Loading'
 import PayNow from '../components/PayNow'
 import ReviewWidget from '../components/ReviewWidget'
@@ -39,7 +40,7 @@ export default function MyBookings() {
       setBusyId(booking.id)
       try {
         await cancelBooking(booking.id, reason.trim())
-        setFlash(`Booking #${booking.id} cancelled.`)
+        setFlash(`Booking #${booking.id} has been cancelled.`)
         await load()
       } catch (err) {
         setFlash('')
@@ -53,7 +54,7 @@ export default function MyBookings() {
   function actionsFor(b) {
     const acts = [{ key: 'chat', label: '💬 Chat', kind: 'btn-secondary' }]
     if (b.status === 'PENDING') acts.push({ key: 'cancel', label: 'Cancel', kind: 'btn-danger', disabled: busyId === b.id })
-    if (b.status === 'ACCEPTED') acts.push({ key: 'track', label: '🗺 Track expert' })
+    if (b.status === 'ACCEPTED') acts.push({ key: 'track', label: '🗺 Track Expert', kind: 'btn-primary' })
     return acts
   }
 
@@ -61,11 +62,20 @@ export default function MyBookings() {
 
   return (
     <div className="page">
-      <h1>My bookings</h1>
+      <div style={{ marginBottom: '20px' }}>
+        <h1 style={{ margin: '0 0 4px' }}>My Bookings</h1>
+        <p className="muted" style={{ margin: 0 }}>
+          Manage your scheduled services, track assigned technicians, and review completed work.
+        </p>
+      </div>
+
       {flash && <div className="alert alert-ok">{flash}</div>}
       {error && <ErrorState message={error} onRetry={load} />}
 
-      <div className="chip-row">
+      <div className="chip-row" style={{ alignItems: 'center' }}>
+        <span className="muted tiny" style={{ display: 'flex', alignItems: 'center', gap: '4px', marginRight: '4px' }}>
+          <IconFilter size={13} /> Filter:
+        </span>
         {FILTERS.map((f) => (
           <button key={f} className={`chip-tag ${filter === f ? 'on' : ''}`} onClick={() => setFilter(f)}>
             {f}
@@ -73,11 +83,15 @@ export default function MyBookings() {
         ))}
       </div>
 
-      {!bookings && !error && <Spinner />}
+      {!bookings && !error && <Spinner label="Loading bookings…" />}
       {bookings && visible.length === 0 && (
-        <EmptyState title="No bookings here" hint="Try another filter, or create a new booking.">
+        <EmptyState
+          title="No bookings in this category"
+          hint="Try switching filters or book a verified expert right now."
+          icon="📋"
+        >
           <button className="btn btn-primary btn-sm" onClick={() => navigate('/customer/services')}>
-            Book a service
+            Book a Service
           </button>
         </EmptyState>
       )}

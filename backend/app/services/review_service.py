@@ -18,8 +18,9 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.models import Booking, BookingStatus, Review
+from app.models import Booking, BookingStatus, ExpertProfile, Review
 from app.services.booking_service import _fail
+from app.services.notification_service import NotificationService
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,16 @@ class ReviewService:
             logger.exception("Database error creating review")
             raise _fail("REVIEW_DB_ERROR", 500, "Database error, please try again later") from exc
         db.refresh(review)
+        expert_profile = db.get(ExpertProfile, booking.expert_id)
+        if expert_profile and expert_profile.user_id:
+            NotificationService.create_notification(
+                db,
+                user_id=expert_profile.user_id,
+                title="New Review Received",
+                message=f"A customer rated your service {review.rating}★ for booking #{booking.id}.",
+                type="REVIEW_ADDED",
+                link="/expert/profile",
+            )
         return review
 
     # ------------------------------------------------------------------- read
