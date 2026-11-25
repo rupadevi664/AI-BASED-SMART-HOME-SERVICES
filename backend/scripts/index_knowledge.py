@@ -9,6 +9,12 @@ duplicate; the collection is cleared first so removed documents disappear.
 """
 import argparse
 import sys
+from pathlib import Path
+
+# Ensure the backend directory is in sys.path regardless of execution context
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
 from app.core.config import settings
 from app.rag.chunker import chunk_documents
