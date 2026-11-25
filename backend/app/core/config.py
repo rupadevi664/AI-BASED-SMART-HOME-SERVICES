@@ -17,6 +17,11 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Server binding (PaaS/container standard: $PORT injected dynamically)
+    HOST: str = "0.0.0.0"
+    PORT: int = 8000
+    ENVIRONMENT: str = "production"
+
     # --- Database ---
     # mysql+pymysql://user:password@host:3306/dbname   (production)
     # sqlite:///:memory:                               (tests, set via env)

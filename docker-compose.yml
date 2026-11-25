@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # MySQL Database Service
+  # ============================================================================
+  mysql:
+    image: mysql:8.0
+    container_name: smarthome-mysql
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-ai_home_services}
+      MYSQL_USER: ${MYSQL_USER:-home_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-home_password}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - smarthome-network
+
+  # ============================================================================
+  # FastAPI Backend Service (API, WebSockets, RAG ChromaDB)
+  # ============================================================================
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: smarthome-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-home_user}:${MYSQL_PASSWORD:-home_password}@mysql:3306/${MYSQL_DATABASE:-ai_home_services}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-deployment_jwt_secret_key_minimum_32_characters}
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-AdminPassword123!}
+      ADMIN_NAME: "Platform Admin"
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://localhost:80,http://localhost:5173,http://127.0.0.1:5173}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_CURRENCY: ${RAZORPAY_CURRENCY:-INR}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      PORT: 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/app/backend/chroma_data
+    networks:
+      - smarthome-network
+
+  # ============================================================================
+  # Frontend Web Service (React + Vite + Nginx Reverse Proxy)
+  # ============================================================================
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+        VITE_WS_BASE_URL: ${VITE_WS_BASE_URL:-ws://localhost:8000}
+    container_name: smarthome-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    networks:
+      - smarthome-network
+
+volumes:
+  mysql_data:
+    name: smarthome_mysql_data
+  chroma_data:
+    name: smarthome_chroma_data
+
+networks:
+  smarthome-network:
+    name: smarthome_network
+    driver: bridge

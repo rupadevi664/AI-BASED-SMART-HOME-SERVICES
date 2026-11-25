@@ -3,13 +3,14 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request, status
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError, OperationalError, SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from app.api.admin import router as admin_router
 from app.api.bookings import router as bookings_router
@@ -24,7 +25,7 @@ from app.api.services import router as services_router
 from app.api.users import router as users_router
 from app.auth.router import router as auth_router
 from app.core.config import settings
-from app.core.database import Base, SessionLocal, engine
+from app.core.database import Base, SessionLocal, engine, get_db
 from app.init_db import INITIAL_SERVICES, _migrate_phase2
 from app.models import Service
 from app.models.service import ServiceStatus
@@ -104,7 +105,7 @@ app = FastAPI(
         "`access_token` → click Authorize → paste "
         "`Bearer <access_token>`."
     ),
-    version="8.0.0-phase8",
+    version="10.0.0-phase10",
     lifespan=lifespan,
 )
 
@@ -185,12 +186,31 @@ app.include_router(llm_router)
 app.include_router(admin_router)
 
 
-@app.get("/", tags=["Health"], summary="Health check")
-def health_check() -> dict:
+@app.get("/", tags=["Health"], summary="Root service status")
+def root_status() -> dict:
     return {
         "status": "ok",
         "service": "AI-BASED-SMART-HOME-SERVICES",
-        "phases": [1, 2, 3, 4, 5, 6, 7, 8],
+        "version": "10.0.0-phase10",
+        "phases": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    }
+
+
+@app.get("/health", tags=["Health"], summary="Container Liveness & Readiness Probe")
+def health_check(db: Session = Depends(get_db)) -> dict:
+    try:
+        db.execute(select(1)).scalar()
+        db_status = "connected"
+    except Exception as exc:
+        logger.warning(f"Database health probe failed: {exc}")
+        db_status = "unavailable"
+
+    is_healthy = db_status == "connected"
+    return {
+        "status": "healthy" if is_healthy else "degraded",
+        "database": db_status,
+        "service": "AI-BASED-SMART-HOME-SERVICES",
+        "version": "10.0.0-phase10",
     }
 
 

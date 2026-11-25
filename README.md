@@ -5,7 +5,8 @@ An intelligent home-service platform where customers can find and book **verifie
 > **Current status: Phase 1 (foundation) + Phase 2 (discovery) + Phase 3
 > (booking) + Phase 4 (real-time chat) + Phase 5 (live location tracking) +
 > Phase 6 (Razorpay payments + reviews/ratings) + Phase 7 (Gemini AI
-> assistant) + Phase 8 (RAG + ChromaDB) + Phase 9 (Real-time Notifications) + React frontend — complete.**
+> assistant) + Phase 8 (RAG + ChromaDB) + Phase 9 (Real-time Notifications) +
+> Phase 10 (Production Containerization & Turnkey Deployment) + React frontend — complete.**
 
 ## 📸 Platform Walkthrough & Screenshots
 
@@ -209,9 +210,33 @@ real-time event triggers fired on booking acceptance, payment verification,
 review submissions, and admin approvals, with an interactive notification bell
 and floating dropdown alert center in the React navigation header.
 
-Not yet (later phases): deployment (Phase 10).
+**Phase 10** — **Production Containerization & Turnkey Cloud Deployment**:
+production multi-stage Dockerfiles for backend and frontend, optimized Nginx reverse
+proxy configuration for REST & WebSocket upgrade streams (`/ws/`), container health
+check probes (`/health`, `/healthz`), zero-downtime database wait & auto-initialization
+script (`entrypoint.sh`), multi-service orchestration (`docker-compose.yml` and
+`docker-compose.prod.yml`), one-click PaaS blueprint (`render.yaml`, `Procfile`),
+production environment templates (`.env.production.example`), and complete
+deployment guide in **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 
-## Quick start
+## Quick start (Docker Compose - Production Ready)
+
+To deploy the entire production stack (MySQL + Backend + Frontend + ChromaDB):
+
+```bash
+# 1. Copy the production environment configuration
+cp .env.production.example .env.production
+
+# 2. Launch the entire containerized stack
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+
+# 3. Verify container health
+docker compose -f docker-compose.prod.yml ps
+```
+
+Full deployment instructions: **[DEPLOYMENT.md](DEPLOYMENT.md)**.
+
+## Quick start (Local Development)
 
 ```bash
 cd backend
@@ -237,7 +262,7 @@ cd backend
 .venv\Scripts\python scripts\location_test.py             # two-client live-location flow
 ```
 
-## Quick start (full stack)
+## Quick start (full stack dev)
 
 ```bash
 # Terminal 1 — backend
@@ -255,10 +280,24 @@ npm run dev                            # http://localhost:5173
 
 ```
 AI-BASED-SMART-HOME-SERVICES/
-├── backend/            # FastAPI application (see backend/README.md)
-├── frontend/           # React + Vite SPA (see frontend/README.md)
+├── backend/                  # FastAPI application & REST/WebSocket APIs
+│   ├── app/                  # Models, schemas, services, API routers
+│   ├── Dockerfile            # Production Python container configuration
+│   ├── entrypoint.sh         # Container boot, DB migration, & seeder
+│   └── Procfile              # PaaS execution entrypoint
+├── frontend/                 # React + Vite Single-Page Application
+│   ├── src/                  # Components, pages, hooks, services
+│   ├── Dockerfile            # Multi-stage build & production Nginx server
+│   └── nginx.conf            # High-performance Nginx reverse proxy
+├── knowledge_base/           # Markdown service guides for RAG embeddings
+├── screenshots/              # 14 platform walkthrough screenshots
+├── docker-compose.yml        # Development container stack
+├── docker-compose.prod.yml   # Production VPS container stack
+├── render.yaml               # Render.com Blueprint Infrastructure-as-Code
+├── DEPLOYMENT.md             # Complete deployment & operations guide
+├── .env.production.example   # Production environment template
 ├── .gitignore
 └── README.md
 ```
 
-Full documentation: **[backend/README.md](backend/README.md)**
+Full documentation: **[backend/README.md](backend/README.md)** | **[DEPLOYMENT.md](DEPLOYMENT.md)**
